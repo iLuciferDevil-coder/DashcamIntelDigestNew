@@ -1,0 +1,43 @@
+name: Dashcam Intel Digest
+
+on:
+  # Runs daily at 9:00 AM IST (3:30 AM UTC)
+  schedule:
+    - cron: "30 3 * * *"
+
+  # IMPORTANT: Manual trigger so you can test any time from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run digest script
+        env:
+          BREVO_API_KEY:    ${{ secrets.BREVO_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SERPER_API_KEY:   ${{ secrets.SERPER_API_KEY }}
+          RECIPIENT_EMAIL:  ${{ secrets.RECIPIENT_EMAIL }}
+          RECIPIENT_NAME:   ${{ secrets.RECIPIENT_NAME }}
+        run: python scripts/digest.py
+
+      - name: Upload HTML preview as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-preview-${{ github.run_id }}
+          path: digest-preview.html
+          retention-days: 7
