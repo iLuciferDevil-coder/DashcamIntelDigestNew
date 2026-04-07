@@ -13,6 +13,8 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+
+
 BREVO_API_KEY    = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY   = os.environ["SERPER_API_KEY"]
@@ -358,7 +360,7 @@ def build_html(all_data: list, date_str: str) -> str:
 def send_email(html: str, date_str: str):
     payload = {
         "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
-        "to":          [{"email": RECIPIENT_EMAIL, "name": RECIPIENT_NAME}],
+        "to": [{"email": e.strip(), "name": RECIPIENT_NAME} for e in RECIPIENT_EMAIL.split(",")],
         "subject":     f"🚗 Dashcam Intel — {date_str}",
         "htmlContent": html,
     }
