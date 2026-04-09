@@ -3,6 +3,7 @@
 Qubo Dashcam Competitor Intelligence Digest
 - Searches Web, YouTube, and Reddit for competitor mentions in the last 24h
 - Uses Claude to filter noise and summarise relevance
+- Tags each mention as India or Global
 - Sends a beautiful HTML email via Brevo
 """
 
@@ -13,35 +14,37 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-
-
 BREVO_API_KEY    = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY   = os.environ["SERPER_API_KEY"]
 RECIPIENT_EMAIL  = os.environ.get("RECIPIENT_EMAIL", "siddharth.bhattacharjee@heroelectronix.com")
-RECIPIENT_NAME   = os.environ.get("RECIPIENT_NAME", "Siddharth")
+RECIPIENT_NAME   = os.environ.get("RECIPIENT_NAME", "Siddharth") or "Siddharth"
 SENDER_EMAIL     = "contact@thetrendingone.in"
 SENDER_NAME      = "Qubo Intel Bot"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPETITORS = [
-    {"name": "70mai",     "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
-    {"name": "DDPai",     "color": "#8b5cf6", "queries": ["DDPai dashcam India", "DDPai dash camera review"]},
-    {"name": "CP Plus",   "color": "#ef4444", "queries": ["CP Plus dashcam India", "CP Plus dash camera car"]},
-    {"name": "boAt",      "color": "#06b6d4", "queries": ["boAt dashcam India", "boAt Hive dashcam"]},
-    {"name": "Jio EyeQ",  "color": "#10b981", "queries": ["Jio EyeQ dashcam", "Jio EyeQ dash camera India"]},
-    {"name": "Viofo",     "color": "#f59e0b", "queries": ["Viofo dashcam India", "Viofo dash camera"]},
-    {"name": "Redtiger",  "color": "#ec4899", "queries": ["Redtiger dashcam India", "Redtiger dash cam"]},
-    {"name": "Qubo",      "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
+    {"name": "70mai",        "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
+    {"name": "DDPai",        "color": "#8b5cf6", "queries": ["DDPai dashcam India", "DDPai dash camera review"]},
+    {"name": "CP Plus",      "color": "#ef4444", "queries": ["CP Plus dashcam India", "CP Plus dash camera car"]},
+    {"name": "boAt",         "color": "#06b6d4", "queries": ["boAt dashcam India", "boAt Hive dashcam"]},
+    {"name": "Jio EyeQ",     "color": "#10b981", "queries": ["Jio EyeQ dashcam", "Jio EyeQ dash camera India"]},
+    {"name": "Viofo",        "color": "#f59e0b", "queries": ["Viofo dashcam India", "Viofo dash camera"]},
+    {"name": "Redtiger",     "color": "#ec4899", "queries": ["Redtiger dashcam India", "Redtiger dash cam"]},
+    {"name": "Blaupunkt",    "color": "#1d4ed8", "queries": ["Blaupunkt dashcam India", "Blaupunkt dash camera"]},
+    {"name": "Nexdigitron",  "color": "#7c3aed", "queries": ["Nexdigitron dashcam India", "Nexdigitron dash camera"]},
+    {"name": "Fleet Track",  "color": "#b45309", "queries": ["Fleet Track dashcam India", "Fleet Track dash camera GPS"]},
+    {"name": "Onelap",       "color": "#0369a1", "queries": ["Onelap dashcam India", "Onelap dash camera"]},
+    {"name": "TrueView",     "color": "#047857", "queries": ["TrueView dashcam India", "TrueView dash camera"]},
+    {"name": "Philips",      "color": "#0ea5e9", "queries": ["Philips dashcam India", "Philips dash camera ADR"]},
+    {"name": "Garmin",       "color": "#16a34a", "queries": ["Garmin dashcam India", "Garmin Dash Cam"]},
+    {"name": "Qubo",         "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
 ]
 
 # ── Step 1: Fetch from Serper (Web + YouTube + Reddit) ───────────────────────
 
 def serper_search(query: str, search_type: str = "search") -> list:
-    """
-    search_type: "search" (web), "news", "videos" (YouTube), or add 'reddit' to query for Reddit
-    """
     endpoint_map = {
         "search": "https://google.serper.dev/search",
         "news":   "https://google.serper.dev/news",
@@ -53,7 +56,7 @@ def serper_search(query: str, search_type: str = "search") -> list:
         "gl": "in",
         "hl": "en",
         "num": 5,
-        "tbs": "qdr:d",   # past 24 hours
+        "tbs": "qdr:d",
     }
     headers = {
         "X-API-KEY": SERPER_API_KEY,
@@ -63,7 +66,6 @@ def serper_search(query: str, search_type: str = "search") -> list:
         resp = requests.post(url, headers=headers, json=payload, timeout=15)
         resp.raise_for_status()
         data = resp.json()
-        # Normalize result keys
         results = []
         for item in data.get("organic", []) + data.get("news", []) + data.get("videos", []):
             results.append({
@@ -80,26 +82,18 @@ def serper_search(query: str, search_type: str = "search") -> list:
 
 
 def fetch_all_mentions(competitor: dict) -> list:
-    """Fetch web news, YouTube, and Reddit mentions for a competitor."""
     all_results = []
-    name = competitor["name"]
-
     for q in competitor["queries"]:
-        # Web news
         all_results += serper_search(q, "news")
-        # YouTube
         all_results += serper_search(f"{q} site:youtube.com", "videos")
-        # Reddit
         all_results += serper_search(f"{q} site:reddit.com", "search")
 
-    # Deduplicate by link
     seen = set()
     unique = []
     for r in all_results:
         if r["link"] not in seen:
             seen.add(r["link"])
             unique.append(r)
-
     return unique
 
 
@@ -114,7 +108,6 @@ def classify_source_type(link: str) -> str:
 
 
 def filter_and_summarise(competitor: dict, raw_results: list) -> list:
-    """Use Claude to filter out noise (e.g. CP Plus CCTV articles) and summarise."""
     if not raw_results:
         return []
 
@@ -132,7 +125,8 @@ Your task:
 1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
 2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-4. Return ONLY a JSON array. No preamble, no markdown, no explanation.
+4. Tag each result as "India" if it is clearly about the Indian market (Indian prices, Indian reviewers, India launches, .in domains, mentions of India/Indian cities), or "Global" otherwise.
+5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
 [
@@ -142,7 +136,8 @@ Format:
     "source": "source name",
     "link": "url",
     "date": "date if available",
-    "insight": "One sentence about why this matters to Qubo"
+    "insight": "One sentence about why this matters to Qubo",
+    "region": "India"
   }}
 ]
 
@@ -168,16 +163,15 @@ Results to evaluate:
         )
         resp.raise_for_status()
         text = resp.json()["content"][0]["text"].strip()
-        # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("```")[1]
             if text.startswith("json"):
                 text = text[4:]
         filtered = json.loads(text)
-        # Re-attach source type
         for item in filtered:
-            orig = next((r for r in raw_results if r["link"] == item.get("link", "")), {})
             item["type"] = classify_source_type(item.get("link", ""))
+            if "region" not in item:
+                item["region"] = "Global"
         return filtered
     except Exception as e:
         print(f"    Claude filter error for {name}: {e}")
@@ -198,66 +192,97 @@ SOURCE_BADGE_COLORS = {
     "Web":     "#4a5568",
 }
 
+
+def render_article_row(art: dict) -> str:
+    badge_color = SOURCE_BADGE_COLORS.get(art.get("type", "Web"), "#4a5568")
+    icon        = SOURCE_ICONS.get(art.get("type", "Web"), "◈")
+    date_label  = f'<span style="color:#9ca3af;font-size:11px;">  {art.get("date","")}</span>' if art.get("date") else ""
+    return f"""
+    <tr>
+      <td style="padding:12px 24px;border-bottom:1px solid #f3f4f6;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <span style="display:inline-block;background:{badge_color};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">{icon} {art.get("type","Web")}</span>
+              {date_label}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:6px;">
+              <a href="{art.get('link','#')}" style="color:#1a202c;font-size:14px;font-weight:600;text-decoration:none;line-height:1.4;">{art.get('title','')}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:4px;">
+              <p style="color:#6b7280;font-size:12px;margin:0;font-style:italic;">📌 {art.get('insight','')}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding-top:4px;">
+              <span style="color:#9ca3af;font-size:11px;">via {art.get('source','')}</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>"""
+
+
+def render_region_block(articles: list, label: str, flag: str) -> str:
+    if not articles:
+        return ""
+    rows = "".join([render_article_row(a) for a in articles])
+    return f"""
+    <tr>
+      <td style="padding:10px 24px 4px;background:#f1f5f9;">
+        <p style="margin:0;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#64748b;">{flag} {label}</p>
+      </td>
+    </tr>
+    {rows}"""
+
+
 def build_html(all_data: list, date_str: str) -> str:
     total_mentions = sum(len(d["articles"]) for d in all_data)
     active_brands  = sum(1 for d in all_data if d["articles"])
 
-    # Build competitor sections
     sections_html = ""
     for data in all_data:
-        comp      = data["competitor"]
-        articles  = data["articles"]
-        color     = comp["color"]
-        name      = comp["name"]
+        comp     = data["competitor"]
+        articles = data["articles"]
+        color    = comp["color"]
+        name     = comp["name"]
+
+        india_articles  = [a for a in articles if a.get("region") == "India"]
+        global_articles = [a for a in articles if a.get("region") != "India"]
 
         if not articles:
-            card_content = f"""
+            card_content = """
             <tr>
               <td style="padding:16px 24px 24px;text-align:center;">
                 <p style="color:#9ca3af;font-size:13px;margin:0;font-style:italic;">No dashcam-specific mentions in the last 24 hours</p>
               </td>
             </tr>"""
         else:
-            rows = ""
-            for art in articles:
-                badge_color = SOURCE_BADGE_COLORS.get(art.get("type", "Web"), "#4a5568")
-                icon        = SOURCE_ICONS.get(art.get("type", "Web"), "◈")
-                date_label  = f'<span style="color:#9ca3af;font-size:11px;">  {art.get("date","")}</span>' if art.get("date") else ""
-                rows += f"""
-                <tr>
-                  <td style="padding:12px 24px;border-bottom:1px solid #f3f4f6;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td>
-                          <span style="display:inline-block;background:{badge_color};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">{icon} {art.get("type","Web")}</span>
-                          {date_label}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding-top:6px;">
-                          <a href="{art.get('link','#')}" style="color:#1a202c;font-size:14px;font-weight:600;text-decoration:none;line-height:1.4;">{art.get('title','')}</a>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding-top:4px;">
-                          <p style="color:#6b7280;font-size:12px;margin:0;font-style:italic;">📌 {art.get('insight','')}</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding-top:4px;">
-                          <span style="color:#9ca3af;font-size:11px;">via {art.get('source','')}</span>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>"""
+            card_content = (
+                render_region_block(india_articles, "India", "🇮🇳") +
+                render_region_block(global_articles, "Global", "🌐")
+            )
 
-            card_content = rows
+        india_count  = len(india_articles)
+        global_count = len(global_articles)
 
-        count_pill = f'<span style="background:{color}22;color:{color};font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;margin-left:8px;">{len(articles)} mention{"s" if len(articles)!=1 else ""}</span>'
+        if articles:
+            count_pill = (
+                f'<span style="background:{color}22;color:{color};font-size:11px;font-weight:700;'
+                f'padding:2px 10px;border-radius:20px;margin-left:8px;">'
+                f'🇮🇳 {india_count} India &nbsp;·&nbsp; 🌐 {global_count} Global</span>'
+            )
+        else:
+            count_pill = (
+                f'<span style="background:{color}22;color:{color};font-size:11px;font-weight:700;'
+                f'padding:2px 10px;border-radius:20px;margin-left:8px;">0 mentions</span>'
+            )
 
         sections_html += f"""
-        <!-- {name} Section -->
         <table width="600" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
           <tr>
             <td style="background:{color};padding:14px 24px;">
@@ -274,7 +299,6 @@ def build_html(all_data: list, date_str: str) -> str:
           {card_content}
         </table>"""
 
-    # Summary bar
     summary_items = "".join([
         f'<td style="padding:0 20px;border-right:1px solid #e5e7eb;text-align:center;" valign="middle">'
         f'<p style="margin:0;font-size:22px;font-weight:800;color:#1a202c;">{len(d["articles"])}</p>'
@@ -316,9 +340,7 @@ def build_html(all_data: list, date_str: str) -> str:
     <tr>
       <td style="padding:16px 4px;">
         <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            {summary_items}
-          </tr>
+          <tr>{summary_items}</tr>
         </table>
       </td>
     </tr>
@@ -350,7 +372,6 @@ def build_html(all_data: list, date_str: str) -> str:
 
 </td></tr>
 </table>
-
 </body>
 </html>"""
 
@@ -360,7 +381,7 @@ def build_html(all_data: list, date_str: str) -> str:
 def send_email(html: str, date_str: str):
     payload = {
         "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
-        "to": [{"email": e.strip(), "name": RECIPIENT_NAME or "Siddharth"} for e in RECIPIENT_EMAIL.split(",")],
+        "to": [{"email": e.strip(), "name": RECIPIENT_NAME} for e in RECIPIENT_EMAIL.split(",")],
         "subject":     f"🚗 Dashcam Intel — {date_str}",
         "htmlContent": html,
     }
@@ -394,7 +415,6 @@ def main():
     print("\nBuilding HTML email...")
     html = build_html(all_data, date_str)
 
-    # Save preview artifact
     with open("digest-preview.html", "w") as f:
         f.write(html)
     print("  Saved digest-preview.html (check Actions artifacts)")
