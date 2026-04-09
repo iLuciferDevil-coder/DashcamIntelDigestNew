@@ -360,7 +360,7 @@ def build_html(all_data: list, date_str: str) -> str:
 def send_email(html: str, date_str: str):
     payload = {
         "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
-        "to": [{"email": e.strip(), "name": RECIPIENT_NAME} for e in RECIPIENT_EMAIL.split(",")],
+        "to": [{"email": e.strip(), "name": RECIPIENT_NAME or "Siddharth"} for e in RECIPIENT_EMAIL.split(",")],
         "subject":     f"🚗 Dashcam Intel — {date_str}",
         "htmlContent": html,
     }
