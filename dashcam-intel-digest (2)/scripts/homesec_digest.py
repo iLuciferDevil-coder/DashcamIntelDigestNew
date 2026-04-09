@@ -20,7 +20,9 @@ BREVO_API_KEY = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
-    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
+    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
+    {"email": "megha.gupta@heroelectronix.com",             "name": "Megha"},
 ]
 SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
@@ -188,6 +190,19 @@ COMPETITORS = [
 
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
+def is_within_24h(date_str: str) -> bool:
+    if not date_str:
+        return True
+    d = date_str.lower().strip()
+    if any(x in d for x in ["hour", "minute", "just now", "second"]):
+        return True
+    if "1 day ago" in d:
+        return True
+    if any(x in d for x in ["2 day", "3 day", "4 day", "5 day", "6 day", "week", "month", "year"]):
+        return False
+    return True
+
+
 def serper_search(query: str, search_type: str = "search") -> list:
     endpoint_map = {
         "search": "https://google.serper.dev/search",
@@ -201,6 +216,7 @@ def serper_search(query: str, search_type: str = "search") -> list:
         "hl": "en",
         "num": 5,
         "tbs": "qdr:d",
+        "location": "India",
     }
     headers = {
         "X-API-KEY": SERPER_API_KEY,
@@ -231,6 +247,7 @@ def fetch_all_mentions(competitor: dict) -> list:
         all_results += serper_search(q, "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
+    all_results = [r for r in all_results if is_within_24h(r.get("date", ""))]
     seen = set()
     unique = []
     for r in all_results:
@@ -255,22 +272,25 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
         return []
 
     name = competitor["name"]
+    today = datetime.now(IST).strftime("%d %B %Y")
     articles_text = "\n\n".join([
-        f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nSnippet: {r['snippet']}\nURL: {r['link']}"
+        f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nDate: {r.get('date','unknown')}\nSnippet: {r['snippet']}\nURL: {r['link']}"
         for i, r in enumerate(raw_results[:15])
     ])
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian home security camera brand (part of Hero Group).
 
 I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
+Today's date is {today}.
 
 Your task:
 1. Keep ONLY results clearly about home security cameras, CCTV cameras, indoor cameras, outdoor cameras, IP cameras, PTZ cameras, NVR/DVR systems, or wireless/WiFi surveillance cameras for "{name}" in the INDIAN market.
 2. Discard anything that is:
-   - Not about cameras or surveillance (e.g. Godrej locks/safes, Zebronics speakers/accessories, Honeywell thermostats, TP-Link routers)
+   - Published or dated more than 24 hours ago (today is {today})
+   - Not clearly from or about India (must have at least one of: Indian prices in ₹, Indian publication/YouTube channel, explicit mention of India or an Indian city, or a .in domain)
+   - Not about cameras or surveillance (e.g. Godrej locks/safes, Zebronics speakers, Honeywell thermostats, TP-Link routers/switches)
    - About smart doorbells or video doorbells
-   - Not relevant to India (no Indian prices, no Indian context, no Indian reviewers or publications)
-   - Generic evergreen buying guides with no new information
+   - Generic evergreen buying guides with no new information or launch news
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security camera business in India.
 4. Classify each result into one of these tags: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
@@ -542,7 +562,7 @@ def build_html(all_data: list, date_str: str) -> str:
     <tr>
       <td style="padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.7;">
-          Auto-generated daily at 9:00 AM IST by Qubo Intel Bot<br>
+          Auto-generated daily at 9:30 AM IST by Qubo Intel Bot<br>
           Powered by Serper · Filtered by Claude AI · Delivered via Brevo<br>
           <span style="color:#d1d5db;">Hero Electronix Pvt. Ltd.</span>
         </p>
