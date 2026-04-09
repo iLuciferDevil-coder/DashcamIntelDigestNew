@@ -370,6 +370,7 @@ def send_email(html: str, date_str: str):
         json=payload,
         timeout=15,
     )
+    print("Brevo response:", resp.status_code, resp.text)
     resp.raise_for_status()
     print(f"  ✅ Email sent to {RECIPIENT_EMAIL} (id: {resp.json().get('messageId')})")
 
