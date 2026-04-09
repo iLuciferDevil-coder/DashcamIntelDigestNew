@@ -409,9 +409,10 @@ def build_html(all_data: list, date_str: str) -> str:
 # ── Step 4: Send via Brevo ────────────────────────────────────────────────────
 
 def send_email(html: str, date_str: str):
+    emails = ", ".join([r["email"] for r in RECIPIENTS])
     payload = {
         "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
-        "to": [{"email": r["email"], "name": r["name"]} for r in RECIPIENTS],
+        "to":          [{"email": r["email"], "name": r["name"]} for r in RECIPIENTS],
         "subject":     f"🚗 Dashcam Intel — {date_str}",
         "htmlContent": html,
     }
@@ -423,8 +424,7 @@ def send_email(html: str, date_str: str):
     )
     print("Brevo response:", resp.status_code, resp.text)
     resp.raise_for_status()
-    print(f"  ✅ Email sent to {RECIPIENT_EMAIL} (id: {resp.json().get('messageId')})")
-
+    print(f"  ✅ Email sent to {emails} (id: {resp.json().get('messageId')})")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
