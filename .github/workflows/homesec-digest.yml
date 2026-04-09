@@ -1,0 +1,40 @@
+name: Home Security Intel Digest
+
+on:
+  schedule:
+    # 9:30 AM IST = 4:00 AM UTC (staggered 30 min after dashcam digest)
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests anthropic
+
+      - name: Run home security digest
+        env:
+          BREVO_API_KEY:     ${{ secrets.BREVO_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SERPER_API_KEY:    ${{ secrets.SERPER_API_KEY }}
+        run: python "dashcam-intel-digest (2)/scripts/homesec_digest.py"
+
+      - name: Upload HTML preview as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: homesec-digest-preview-${{ github.run_id }}
+          path: homesec-digest-preview.html
+          if-no-files-found: ignore
+          retention-days: 7
