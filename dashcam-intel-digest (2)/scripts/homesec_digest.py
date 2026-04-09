@@ -5,6 +5,7 @@ Qubo Home Security Camera Intel Digest
 - Uses Claude to filter noise and summarise relevance
 - India-only focus: filters out global/international content
 - Covers: indoor cameras, outdoor cameras, CCTV, IP cameras, PTZ, NVR/DVR
+- Excludes aggregator domains that re-date old content (MSN, Yahoo etc.)
 - 2-column grid layout, zero-mention brands hidden
 - Sends a beautiful HTML email via Brevo
 """
@@ -28,6 +29,16 @@ SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
+# Aggregators that re-timestamp old articles — excluded from all queries
+QUERY_EXCLUSIONS = "-site:msn.com -site:yahoo.com -site:flipboard.com -site:smartnews.com"
+
+# Additional domain blocklist applied post-fetch
+EXCLUDED_DOMAINS = [
+    "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
+    "upstox.com", "goodreturns.in", "indiainfoline.com",
+    "moneycontrol.com", "business-standard.com/press-release",
+]
 
 COMPETITORS = [
     {
@@ -203,6 +214,10 @@ def is_within_24h(date_str: str) -> bool:
     return True
 
 
+def is_excluded_domain(link: str) -> bool:
+    return any(domain in link for domain in EXCLUDED_DOMAINS)
+
+
 def serper_search(query: str, search_type: str = "search") -> list:
     endpoint_map = {
         "search": "https://google.serper.dev/search",
@@ -244,10 +259,17 @@ def serper_search(query: str, search_type: str = "search") -> list:
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
     for q in competitor["queries"]:
-        all_results += serper_search(q, "news")
+        # Append domain exclusions to news queries to stop aggregators at source
+        all_results += serper_search(f"{q} {QUERY_EXCLUSIONS}", "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
-    all_results = [r for r in all_results if is_within_24h(r.get("date", ""))]
+
+    # Post-fetch: filter stale dates and blocked domains
+    all_results = [
+        r for r in all_results
+        if is_within_24h(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))
+    ]
+
     seen = set()
     unique = []
     for r in all_results:
@@ -291,6 +313,7 @@ Your task:
    - Not about cameras or surveillance (e.g. Godrej locks/safes, Zebronics speakers, Honeywell thermostats, TP-Link routers/switches)
    - About smart doorbells or video doorbells
    - Generic evergreen buying guides with no new information or launch news
+   - Press releases or paid promotional content with no genuine news value
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security camera business in India.
 4. Classify each result into one of these tags: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
