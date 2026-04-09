@@ -32,7 +32,7 @@ jobs:
           SERPER_API_KEY:   ${{ secrets.SERPER_API_KEY }}
           RECIPIENT_EMAIL:  ${{ secrets.RECIPIENT_EMAIL }}
           RECIPIENT_NAME:   ${{ secrets.RECIPIENT_NAME }}
-        run: python scripts/digest.py
+        run: python "dashcam-intel-digest (2)/scripts/digest.py"
 
       - name: Upload HTML preview as artifact
         if: always()
