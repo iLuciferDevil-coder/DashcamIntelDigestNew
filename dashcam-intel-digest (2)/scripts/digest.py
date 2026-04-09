@@ -15,16 +15,16 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY    = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
-SERPER_API_KEY   = os.environ["SERPER_API_KEY"]
+BREVO_API_KEY = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
+SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
     {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
     {"email": "madhur.saxena@heroelectronix.com",           "name": "Madhur"},
 ]
-SENDER_EMAIL     = "contact@thetrendingone.in"
-SENDER_NAME      = "Qubo Intel Bot"
+SENDER_EMAIL = "contact@thetrendingone.in"
+SENDER_NAME  = "Qubo Intel Bot"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -244,7 +244,6 @@ def render_region_block(articles: list, label: str, flag: str) -> str:
 
 
 def build_brand_card(comp: dict, articles: list) -> str:
-    """Build a single brand card for use in 2-column grid."""
     color        = comp["color"]
     name         = comp["name"]
     india_arts   = [a for a in articles if a.get("region") == "India"]
@@ -279,10 +278,8 @@ def build_html(all_data: list, date_str: str) -> str:
     total_mentions = sum(len(d["articles"]) for d in all_data)
     active_brands  = sum(1 for d in all_data if d["articles"])
 
-    # Only keep brands with mentions
-    active_data = [d for d in all_data if d["articles"]]
+    active_data = [d for d in all_data if d["articles"] and d["competitor"]["name"] != "Qubo"]
 
-    # ── Summary bar (all brands, 2-line: number + name) ──────────────────────
     summary_items = "".join([
         f'<td style="padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;" valign="middle">'
         f'<p style="margin:0;font-size:20px;font-weight:800;color:{"#1a202c" if len(d["articles"]) > 0 else "#d1d5db"};">{len(d["articles"])}</p>'
@@ -291,7 +288,6 @@ def build_html(all_data: list, date_str: str) -> str:
         for d in all_data
     ])
 
-    # ── 2-column grid ─────────────────────────────────────────────────────────
     grid_rows = ""
     for i in range(0, len(active_data), 2):
         left  = active_data[i]
@@ -314,22 +310,23 @@ def build_html(all_data: list, date_str: str) -> str:
           </td>
         </tr>"""
 
-    # ── Qubo always gets full-width solo card at bottom ───────────────────────
     qubo_data = next((d for d in all_data if d["competitor"]["name"] == "Qubo"), None)
     qubo_section = ""
     if qubo_data and qubo_data["articles"]:
         qubo_card = build_brand_card(qubo_data["competitor"], qubo_data["articles"])
-        # Remove Qubo from grid if it appeared there
         qubo_section = f"""
-        <tr>
-          <td style="padding-bottom:16px;">
-            <table width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td width="100%" valign="top">{qubo_card}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>"""
+        <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
+          <tr>
+            <td>
+              <p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">🔵 Qubo — Self Monitor</p>
+            </td>
+          </tr>
+        </table>
+        <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+          <tr>
+            <td style="padding-bottom:16px;">{qubo_card}</td>
+          </tr>
+        </table>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -379,13 +376,13 @@ def build_html(all_data: list, date_str: str) -> str:
     </tr>
   </table>
 
-  <!-- 2-column grid (competitors only, no Qubo) -->
+  <!-- 2-column grid (competitors only) -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">
     {grid_rows}
   </table>
 
   <!-- Qubo full-width section -->
-  {"<table width='640' cellpadding='0' cellspacing='0' style='margin:0 auto;'>" + qubo_section + "</table>" if qubo_section else ""}
+  {qubo_section}
 
   <!-- Footer -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
@@ -426,6 +423,7 @@ def send_email(html: str, date_str: str):
     resp.raise_for_status()
     print(f"  ✅ Email sent to {emails} (id: {resp.json().get('messageId')})")
 
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -451,8 +449,7 @@ def main():
 
     print("Sending via Brevo...")
     send_email(html, date_str)
-    emails = ", ".join([r["email"] for r in RECIPIENTS])
-print(f"  ✅ Email sent to {emails} (id: {resp.json().get('messageId')})")
+    print("\nDone ✓")
 
 
 if __name__ == "__main__":
