@@ -4,6 +4,7 @@ Qubo Dashcam Competitor Intelligence Digest
 - Searches Web, YouTube, and Reddit for competitor mentions in the last 24h
 - Uses Claude to filter noise and summarise relevance
 - Tags each mention as India or Global
+- 2-column grid layout, zero-mention brands hidden
 - Sends a beautiful HTML email via Brevo
 """
 
@@ -25,24 +26,24 @@ SENDER_NAME      = "Qubo Intel Bot"
 IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPETITORS = [
-    {"name": "70mai",        "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
-    {"name": "DDPai",        "color": "#8b5cf6", "queries": ["DDPai dashcam India", "DDPai dash camera review"]},
-    {"name": "CP Plus",      "color": "#ef4444", "queries": ["CP Plus dashcam India", "CP Plus dash camera car"]},
-    {"name": "boAt",         "color": "#06b6d4", "queries": ["boAt dashcam India", "boAt Hive dashcam"]},
-    {"name": "Jio EyeQ",     "color": "#10b981", "queries": ["Jio EyeQ dashcam", "Jio EyeQ dash camera India"]},
-    {"name": "Viofo",        "color": "#f59e0b", "queries": ["Viofo dashcam India", "Viofo dash camera"]},
-    {"name": "Redtiger",     "color": "#ec4899", "queries": ["Redtiger dashcam India", "Redtiger dash cam"]},
-    {"name": "Blaupunkt",    "color": "#1d4ed8", "queries": ["Blaupunkt dashcam India", "Blaupunkt dash camera"]},
-    {"name": "Nexdigitron",  "color": "#7c3aed", "queries": ["Nexdigitron dashcam India", "Nexdigitron dash camera"]},
-    {"name": "Fleet Track",  "color": "#b45309", "queries": ["Fleet Track dashcam India", "Fleet Track dash camera GPS"]},
-    {"name": "Onelap",       "color": "#0369a1", "queries": ["Onelap dashcam India", "Onelap dash camera"]},
-    {"name": "TrueView",     "color": "#047857", "queries": ["TrueView dashcam India", "TrueView dash camera"]},
-    {"name": "Philips",      "color": "#0ea5e9", "queries": ["Philips dashcam India", "Philips dash camera ADR"]},
-    {"name": "Garmin",       "color": "#16a34a", "queries": ["Garmin dashcam India", "Garmin Dash Cam"]},
-    {"name": "Qubo",         "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
+    {"name": "70mai",       "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
+    {"name": "DDPai",       "color": "#8b5cf6", "queries": ["DDPai dashcam India", "DDPai dash camera review"]},
+    {"name": "CP Plus",     "color": "#ef4444", "queries": ["CP Plus dashcam India", "CP Plus dash camera car"]},
+    {"name": "boAt",        "color": "#06b6d4", "queries": ["boAt dashcam India", "boAt Hive dashcam"]},
+    {"name": "Jio EyeQ",   "color": "#10b981", "queries": ["Jio EyeQ dashcam", "Jio EyeQ dash camera India"]},
+    {"name": "Viofo",       "color": "#f59e0b", "queries": ["Viofo dashcam India", "Viofo dash camera"]},
+    {"name": "Redtiger",    "color": "#ec4899", "queries": ["Redtiger dashcam India", "Redtiger dash cam"]},
+    {"name": "Blaupunkt",   "color": "#1d4ed8", "queries": ["Blaupunkt dashcam India", "Blaupunkt dash camera"]},
+    {"name": "Nexdigitron", "color": "#7c3aed", "queries": ["Nexdigitron dashcam India", "Nexdigitron dash camera"]},
+    {"name": "Fleet Track", "color": "#b45309", "queries": ["Fleet Track dashcam India", "Fleet Track dash camera GPS"]},
+    {"name": "Onelap",      "color": "#0369a1", "queries": ["Onelap dashcam India", "Onelap dash camera"]},
+    {"name": "TrueView",    "color": "#047857", "queries": ["TrueView dashcam India", "TrueView dash camera"]},
+    {"name": "Philips",     "color": "#0ea5e9", "queries": ["Philips dashcam India", "Philips dash camera ADR"]},
+    {"name": "Garmin",      "color": "#16a34a", "queries": ["Garmin dashcam India", "Garmin Dash Cam"]},
+    {"name": "Qubo",        "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
 ]
 
-# ── Step 1: Fetch from Serper (Web + YouTube + Reddit) ───────────────────────
+# ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
 def serper_search(query: str, search_type: str = "search") -> list:
     endpoint_map = {
@@ -87,7 +88,6 @@ def fetch_all_mentions(competitor: dict) -> list:
         all_results += serper_search(q, "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
-
     seen = set()
     unique = []
     for r in all_results:
@@ -97,7 +97,7 @@ def fetch_all_mentions(competitor: dict) -> list:
     return unique
 
 
-# ── Step 2: Filter & Summarise with Claude ───────────────────────────────────
+# ── Step 2: Filter & Summarise with Claude ────────────────────────────────────
 
 def classify_source_type(link: str) -> str:
     if "youtube.com" in link or "youtu.be" in link:
@@ -196,35 +196,35 @@ SOURCE_BADGE_COLORS = {
 def render_article_row(art: dict) -> str:
     badge_color = SOURCE_BADGE_COLORS.get(art.get("type", "Web"), "#4a5568")
     icon        = SOURCE_ICONS.get(art.get("type", "Web"), "◈")
-    date_label  = f'<span style="color:#9ca3af;font-size:11px;">  {art.get("date","")}</span>' if art.get("date") else ""
+    date_label  = f'<span style="color:#9ca3af;font-size:11px;"> {art.get("date","")}</span>' if art.get("date") else ""
     return f"""
-    <tr>
-      <td style="padding:12px 24px;border-bottom:1px solid #f3f4f6;">
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            <td>
-              <span style="display:inline-block;background:{badge_color};color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;">{icon} {art.get("type","Web")}</span>
-              {date_label}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding-top:6px;">
-              <a href="{art.get('link','#')}" style="color:#1a202c;font-size:14px;font-weight:600;text-decoration:none;line-height:1.4;">{art.get('title','')}</a>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding-top:4px;">
-              <p style="color:#6b7280;font-size:12px;margin:0;font-style:italic;">📌 {art.get('insight','')}</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding-top:4px;">
-              <span style="color:#9ca3af;font-size:11px;">via {art.get('source','')}</span>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>"""
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <span style="display:inline-block;background:{badge_color};color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:0.5px;">{icon} {art.get("type","Web")}</span>
+                  {date_label}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:5px;">
+                  <a href="{art.get('link','#')}" style="color:#1a202c;font-size:13px;font-weight:600;text-decoration:none;line-height:1.4;">{art.get('title','')}</a>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:3px;">
+                  <p style="color:#6b7280;font-size:11px;margin:0;font-style:italic;">📌 {art.get('insight','')}</p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top:3px;">
+                  <span style="color:#9ca3af;font-size:10px;">via {art.get('source','')}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>"""
 
 
 def render_region_block(articles: list, label: str, flag: str) -> str:
@@ -232,80 +232,101 @@ def render_region_block(articles: list, label: str, flag: str) -> str:
         return ""
     rows = "".join([render_article_row(a) for a in articles])
     return f"""
-    <tr>
-      <td style="padding:10px 24px 4px;background:#f1f5f9;">
-        <p style="margin:0;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#64748b;">{flag} {label}</p>
-      </td>
-    </tr>
-    {rows}"""
+        <tr>
+          <td style="padding:8px 14px 3px;background:#f1f5f9;">
+            <p style="margin:0;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:#64748b;">{flag} {label}</p>
+          </td>
+        </tr>
+        {rows}"""
+
+
+def build_brand_card(comp: dict, articles: list) -> str:
+    """Build a single brand card for use in 2-column grid."""
+    color        = comp["color"]
+    name         = comp["name"]
+    india_arts   = [a for a in articles if a.get("region") == "India"]
+    global_arts  = [a for a in articles if a.get("region") != "India"]
+    india_count  = len(india_arts)
+    global_count = len(global_arts)
+
+    count_pill = (
+        f'<span style="background:rgba(255,255,255,0.25);color:#fff;font-size:10px;font-weight:700;'
+        f'padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">'
+        f'🇮🇳{india_count} · 🌐{global_count}</span>'
+    )
+
+    card_body = (
+        render_region_block(india_arts, "India", "🇮🇳") +
+        render_region_block(global_arts, "Global", "🌐")
+    )
+
+    return f"""
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+          <tr>
+            <td style="background:{color};padding:11px 14px;">
+              <span style="color:#fff;font-size:13px;font-weight:800;">{name}</span>
+              {count_pill}
+            </td>
+          </tr>
+          {card_body}
+        </table>"""
 
 
 def build_html(all_data: list, date_str: str) -> str:
     total_mentions = sum(len(d["articles"]) for d in all_data)
     active_brands  = sum(1 for d in all_data if d["articles"])
 
-    sections_html = ""
-    for data in all_data:
-        comp     = data["competitor"]
-        articles = data["articles"]
-        color    = comp["color"]
-        name     = comp["name"]
+    # Only keep brands with mentions
+    active_data = [d for d in all_data if d["articles"]]
 
-        india_articles  = [a for a in articles if a.get("region") == "India"]
-        global_articles = [a for a in articles if a.get("region") != "India"]
-
-        if not articles:
-            card_content = """
-            <tr>
-              <td style="padding:16px 24px 24px;text-align:center;">
-                <p style="color:#9ca3af;font-size:13px;margin:0;font-style:italic;">No dashcam-specific mentions in the last 24 hours</p>
-              </td>
-            </tr>"""
-        else:
-            card_content = (
-                render_region_block(india_articles, "India", "🇮🇳") +
-                render_region_block(global_articles, "Global", "🌐")
-            )
-
-        india_count  = len(india_articles)
-        global_count = len(global_articles)
-
-        if articles:
-            count_pill = (
-                f'<span style="background:{color}22;color:{color};font-size:11px;font-weight:700;'
-                f'padding:2px 10px;border-radius:20px;margin-left:8px;">'
-                f'🇮🇳 {india_count} India &nbsp;·&nbsp; 🌐 {global_count} Global</span>'
-            )
-        else:
-            count_pill = (
-                f'<span style="background:{color}22;color:{color};font-size:11px;font-weight:700;'
-                f'padding:2px 10px;border-radius:20px;margin-left:8px;">0 mentions</span>'
-            )
-
-        sections_html += f"""
-        <table width="600" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-          <tr>
-            <td style="background:{color};padding:14px 24px;">
-              <table width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td>
-                    <span style="color:#ffffff;font-size:15px;font-weight:800;letter-spacing:0.3px;">{name}</span>
-                    {count_pill}
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          {card_content}
-        </table>"""
-
+    # ── Summary bar (all brands, 2-line: number + name) ──────────────────────
     summary_items = "".join([
-        f'<td style="padding:0 20px;border-right:1px solid #e5e7eb;text-align:center;" valign="middle">'
-        f'<p style="margin:0;font-size:22px;font-weight:800;color:#1a202c;">{len(d["articles"])}</p>'
-        f'<p style="margin:2px 0 0;font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">{d["competitor"]["name"]}</p>'
+        f'<td style="padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;" valign="middle">'
+        f'<p style="margin:0;font-size:20px;font-weight:800;color:{"#1a202c" if len(d["articles"]) > 0 else "#d1d5db"};">{len(d["articles"])}</p>'
+        f'<p style="margin:3px 0 0;font-size:10px;color:{"#6b7280" if len(d["articles"]) > 0 else "#d1d5db"};font-weight:600;text-transform:uppercase;letter-spacing:0.4px;line-height:1.3;">{d["competitor"]["name"]}</p>'
         f'</td>'
         for d in all_data
     ])
+
+    # ── 2-column grid ─────────────────────────────────────────────────────────
+    grid_rows = ""
+    for i in range(0, len(active_data), 2):
+        left  = active_data[i]
+        right = active_data[i + 1] if i + 1 < len(active_data) else None
+
+        left_card  = build_brand_card(left["competitor"], left["articles"])
+        right_card = build_brand_card(right["competitor"], right["articles"]) if right else ""
+        right_td   = f'<td width="49%" valign="top">{right_card}</td>' if right else '<td width="49%"></td>'
+
+        grid_rows += f"""
+        <tr>
+          <td style="padding-bottom:16px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="49%" valign="top">{left_card}</td>
+                <td width="2%"></td>
+                {right_td}
+              </tr>
+            </table>
+          </td>
+        </tr>"""
+
+    # ── Qubo always gets full-width solo card at bottom ───────────────────────
+    qubo_data = next((d for d in all_data if d["competitor"]["name"] == "Qubo"), None)
+    qubo_section = ""
+    if qubo_data and qubo_data["articles"]:
+        qubo_card = build_brand_card(qubo_data["competitor"], qubo_data["articles"])
+        # Remove Qubo from grid if it appeared there
+        qubo_section = f"""
+        <tr>
+          <td style="padding-bottom:16px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td width="100%" valign="top">{qubo_card}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>"""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -318,16 +339,16 @@ def build_html(all_data: list, date_str: str) -> str:
 <tr><td align="center">
 
   <!-- Header -->
-  <table width="600" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
     <tr>
-      <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:16px;padding:32px 36px;text-align:center;">
+      <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#60a5fa;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Connected Auto</p>
-        <h1 style="margin:0 0 6px;color:#ffffff;font-size:28px;font-weight:900;letter-spacing:-0.5px;">🚗 Dashcam Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:14px;">{date_str} &nbsp;·&nbsp; Last 24 hours</p>
-        <table cellpadding="0" cellspacing="0" style="margin:18px auto 0;">
+        <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🚗 Dashcam Intel Digest</h1>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; Last 24 hours</p>
+        <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
-            <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:10px 24px;text-align:center;">
-              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} total mentions across {active_brands} brands</span>
+            <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
+              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} mentions &nbsp;·&nbsp; {active_brands} active brands today</span>
             </td>
           </tr>
         </table>
@@ -336,9 +357,9 @@ def build_html(all_data: list, date_str: str) -> str:
   </table>
 
   <!-- Brand summary bar -->
-  <table width="600" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
     <tr>
-      <td style="padding:16px 4px;">
+      <td style="padding:12px 4px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>{summary_items}</tr>
         </table>
@@ -347,18 +368,24 @@ def build_html(all_data: list, date_str: str) -> str:
   </table>
 
   <!-- Section label -->
-  <table width="600" cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
     <tr>
       <td>
-        <p style="margin:0;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Mentions by Brand</p>
+        <p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands Today</p>
       </td>
     </tr>
   </table>
 
-  {sections_html}
+  <!-- 2-column grid (competitors only, no Qubo) -->
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+    {grid_rows}
+  </table>
+
+  <!-- Qubo full-width section -->
+  {"<table width='640' cellpadding='0' cellspacing='0' style='margin:0 auto;'>" + qubo_section + "</table>" if qubo_section else ""}
 
   <!-- Footer -->
-  <table width="600" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
     <tr>
       <td style="padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.7;">
