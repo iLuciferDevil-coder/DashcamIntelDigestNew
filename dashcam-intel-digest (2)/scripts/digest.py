@@ -18,8 +18,11 @@ from datetime import datetime, timezone, timedelta
 BREVO_API_KEY    = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY   = os.environ["SERPER_API_KEY"]
-RECIPIENT_EMAIL  = os.environ.get("RECIPIENT_EMAIL", "siddharth.bhattacharjee@heroelectronix.com")
-RECIPIENT_NAME   = os.environ.get("RECIPIENT_NAME", "Siddharth") or "Siddharth"
+RECIPIENTS = [
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
+    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
+    {"email": "madhur.saxena@heroelectronix.com",           "name": "Madhur"},
+]
 SENDER_EMAIL     = "contact@thetrendingone.in"
 SENDER_NAME      = "Qubo Intel Bot"
 
@@ -408,7 +411,7 @@ def build_html(all_data: list, date_str: str) -> str:
 def send_email(html: str, date_str: str):
     payload = {
         "sender":      {"name": SENDER_NAME, "email": SENDER_EMAIL},
-        "to": [{"email": e.strip(), "name": RECIPIENT_NAME} for e in RECIPIENT_EMAIL.split(",")],
+        "to": [{"email": r["email"], "name": r["name"]} for r in RECIPIENTS],
         "subject":     f"🚗 Dashcam Intel — {date_str}",
         "htmlContent": html,
     }
@@ -448,7 +451,8 @@ def main():
 
     print("Sending via Brevo...")
     send_email(html, date_str)
-    print("\nDone ✓")
+    emails = ", ".join([r["email"] for r in RECIPIENTS])
+print(f"  ✅ Email sent to {emails} (id: {resp.json().get('messageId')})")
 
 
 if __name__ == "__main__":
