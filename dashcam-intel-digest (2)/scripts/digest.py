@@ -447,6 +447,10 @@ def main():
         f.write(html)
     print("  Saved digest-preview.html (check Actions artifacts)")
 
+    total_mentions = sum(len(d["articles"]) for d in all_data)
+if total_mentions == 0:
+    print("\nNo mentions found today — skipping send. No blank digest delivered.")
+else:
     print("Sending via Brevo...")
     send_email(html, date_str)
     print("\nDone ✓")
