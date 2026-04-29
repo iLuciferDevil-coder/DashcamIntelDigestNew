@@ -19,7 +19,9 @@ BREVO_API_KEY = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
-    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
+    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
+    {"email": "madhur.saxena@heroelectronix.com",           "name": "Madhur"},
 ]
 SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
@@ -139,11 +141,7 @@ Today's date is {today}.
 
 Your task:
 1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything that is:
-   - Published or dated more than 24 hours ago (today is {today})
-   - Not clearly from or about India (must have Indian prices in ₹, Indian publication/channel, mention of India/Indian city, or .in domain)
-   - About other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans)
-   - Generic evergreen buying guides with no new information
+2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
 4. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
@@ -448,14 +446,14 @@ def main():
     date_str = now.strftime("%A, %d %B %Y")
     print(f"\n{'='*60}\nQubo Dashcam Intel Digest — {date_str}\n{'='*60}\n")
 
-all_data = []
+    all_data = []
     for comp in COMPETITORS:
         print(f"[{comp['name']}] Fetching mentions (Web + YouTube + Reddit)...")
         raw = fetch_all_mentions(comp)
         print(f"  Raw results: {len(raw)}")
         if raw:
-            print(f"  Sample dates: {[r.get('date','NO_DATE') for r in raw[:3]]}")
-            print(f"  Sample titles: {[r.get('title','')[:50] for r in raw[:2]]}")
+            print(f"  Sample dates: {[r.get('date', 'NO_DATE') for r in raw[:3]]}")
+            print(f"  Sample titles: {[r.get('title', '')[:50] for r in raw[:2]]}")
         filtered = filter_and_summarise(comp, raw)
         print(f"  Relevant: {len(filtered)}")
         all_data.append({"competitor": comp, "articles": filtered})
