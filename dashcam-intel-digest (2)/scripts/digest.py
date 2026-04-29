@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Qubo Dashcam Competitor Intelligence Digest
-- Searches Web, YouTube, and Reddit for competitor mentions in the last 48h
+- Searches Web, YouTube (influencer tracking), and Reddit
+- Web + Reddit: strict 48h date filter
+- YouTube: no date filter — passed to Claude for influencer intelligence
+- Ecommerce sites blocked
 - Uses Claude to filter noise and summarise relevance
 - Tags each mention as India or Global
 - 2-column grid layout, zero-mention brands hidden
@@ -19,7 +22,9 @@ BREVO_API_KEY = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
-    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
+    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
+    {"email": "madhur.saxena@heroelectronix.com",           "name": "Madhur"},
 ]
 SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
@@ -47,28 +52,35 @@ COMPETITORS = [
 EXCLUDED_DOMAINS = [
     "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
     "upstox.com", "goodreturns.in", "indiainfoline.com",
+    "amazon.in", "amazon.com", "flipkart.com", "snapdeal.com",
+    "meesho.com", "jiomart.com", "tatacliq.com", "croma.com",
+    "vijaysales.com", "shopclues.com", "ebay.com", "ebay.in",
+    "paytmmall.com",
 ]
+
+CURRENT_YEAR = str(datetime.now(timezone(timedelta(hours=5, minutes=30))).year)
+OLD_YEARS    = ["2019", "2020", "2021", "2022", "2023", "2024"]
 
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
-def is_within_48h(date_str: str) -> bool:
+def is_recent(date_str: str) -> bool:
+    """Strict date filter for web and Reddit results."""
     if not date_str:
-        return False  # Changed to False — no date = we can't trust it, drop it
+        return False
     d = date_str.lower().strip()
-    # Keep only clearly recent results
     if any(x in d for x in ["hour", "minute", "just now", "second"]):
         return True
     if "1 day ago" in d or "2 day" in d:
         return True
-    # Drop anything with a year that isn't current
-    current_year = str(datetime.now(IST).year)
-    if any(year in d for year in ["2019", "2020", "2021", "2022", "2023", "2024"]):
+    if CURRENT_YEAR in d:
+        return True
+    if any(yr in d for yr in OLD_YEARS):
         return False
     if any(x in d for x in ["week", "month", "year"]):
         return False
     if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
         return False
-    return True
+    return False
 
 
 def is_excluded_domain(link: str) -> bool:
@@ -116,15 +128,19 @@ def serper_search(query: str, search_type: str = "search") -> list:
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
     exclusions = "-site:msn.com -site:yahoo.com -site:amazon.in -site:flipkart.com"
-    for q in competitor["queries"]:
-        # News and Reddit — strict date filter
-        news    = serper_search(f"{q} {exclusions}", "news")
-        reddit  = serper_search(f"{q} site:reddit.com {exclusions}", "search")
-        news    = [r for r in news   if is_recent(r.get("date","")) and not is_excluded_domain(r.get("link",""))]
-        reddit  = [r for r in reddit if is_recent(r.get("date","")) and not is_excluded_domain(r.get("link",""))]
-        all_results += news + reddit
 
-        # YouTube — no date filter, pass everything to Claude
+    for q in competitor["queries"]:
+        # Web news — strict date + domain filter
+        news = serper_search(f"{q} {exclusions}", "news")
+        news = [r for r in news if is_recent(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))]
+        all_results += news
+
+        # Reddit — strict date + domain filter
+        reddit = serper_search(f"{q} site:reddit.com", "search")
+        reddit = [r for r in reddit if is_recent(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))]
+        all_results += reddit
+
+        # YouTube — NO date filter, pass all to Claude for influencer tracking
         youtube = serper_search(f"{q} site:youtube.com", "videos")
         all_results += youtube
 
@@ -135,6 +151,7 @@ def fetch_all_mentions(competitor: dict) -> list:
             seen.add(r["link"])
             unique.append(r)
     return unique
+
 
 # ── Step 2: Filter & Summarise with Claude ────────────────────────────────────
 
@@ -164,10 +181,10 @@ Today's date is {today}.
 
 Your task:
 1. Keep ONLY results relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. For WEB and REDDIT results: discard anything published in {", ".join(OLD_YEARS)} — too old.
-3. For YOUTUBE results: keep if the video title suggests a review, unboxing, comparison, or feature demo of "{name}" dashcam. Discard only if clearly unrelated to dashcams.
-4. Discard ecommerce listings (Amazon, Flipkart, etc.) — news, reviews, and discussions only.
-5. Discard other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom).
+2. For WEB and REDDIT results: discard anything published in {", ".join(OLD_YEARS)} — these are too old.
+3. For YOUTUBE results: keep if the video is a review, unboxing, comparison, or feature demo of "{name}" dashcam by an Indian influencer or tech channel. These are valuable for influencer tracking even if older.
+4. Discard ecommerce product listings (Amazon, Flipkart, etc.) — news, reviews, and discussions only.
+5. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom).
 6. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
 7. Tag each result as "India" if clearly about the Indian market, or "Global" otherwise.
 8. Return ONLY a JSON array. No preamble, no markdown, no explanation.
@@ -361,7 +378,7 @@ def build_html(all_data: list, date_str: str) -> str:
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#60a5fa;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Connected Auto</p>
         <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🚗 Dashcam Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; Last 48 hours</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; Last 48 hours + YouTube</p>
         <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
             <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
