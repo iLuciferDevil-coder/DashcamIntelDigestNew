@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Qubo Dashcam Competitor Intelligence Digest
-- Searches NewsData.io for competitor mentions in the last 24h
+- Searches NewsData.io for competitor mentions in the last 48h
 - Uses Claude to filter noise and summarise relevance
 - Tags each mention as India or Global
 - 2-column grid layout, zero-mention brands hidden
@@ -15,9 +15,9 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY  = os.environ["ANTHROPIC_API_KEY"]
-NEWSDATA_KEY   = os.environ["NEWSDATA_API_KEY"]
+BREVO_API_KEY = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
+NEWSDATA_KEY  = os.environ["NEWSDATA_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
 ]
@@ -30,7 +30,7 @@ COMPETITORS = [
     {"name": "70mai",       "color": "#f97316", "query": "70mai dashcam"},
     {"name": "DDPai",       "color": "#8b5cf6", "query": "DDPai dashcam"},
     {"name": "CP Plus",     "color": "#ef4444", "query": "CP Plus dashcam"},
-    {"name": "boAt",        "color": "#06b6d4", "query": "boAt dashcam OR boAt Hive dashcam"},
+    {"name": "boAt",        "color": "#06b6d4", "query": "boAt dashcam"},
     {"name": "Jio EyeQ",   "color": "#10b981", "query": "Jio EyeQ dashcam"},
     {"name": "Viofo",       "color": "#f59e0b", "query": "Viofo dashcam"},
     {"name": "Redtiger",    "color": "#ec4899", "query": "Redtiger dashcam"},
@@ -41,23 +41,24 @@ COMPETITORS = [
     {"name": "TrueView",    "color": "#047857", "query": "TrueView dashcam"},
     {"name": "Philips",     "color": "#0ea5e9", "query": "Philips dashcam"},
     {"name": "Garmin",      "color": "#16a34a", "query": "Garmin dashcam"},
-    {"name": "Qubo",        "color": "#3b82f6", "query": "Qubo dashcam OR Qubo dash camera"},
+    {"name": "Qubo",        "color": "#3b82f6", "query": "Qubo dashcam"},
 ]
 
 # ── Step 1: Fetch from NewsData.io ────────────────────────────────────────────
 
 def newsdata_search(query: str) -> list:
-    """Search NewsData.io for articles from last 24h."""
+    """Search NewsData.io for articles from the last 48 hours."""
+    from_date = (datetime.now(IST) - timedelta(days=2)).strftime("%Y-%m-%d")
     try:
         resp = requests.get(
             "https://newsdata.io/api/1/news",
             params={
-                "apikey":   NEWSDATA_KEY,
-                "q":        query,
-                "language": "en",
-                "country":  "in",
-                "timeframe": 24,  # last 24 hours
-                "size":     5,
+                "apikey":    NEWSDATA_KEY,
+                "q":         query,
+                "language":  "en",
+                "country":   "in",
+                "from_date": from_date,
+                "size":      5,
             },
             timeout=15,
         )
@@ -174,7 +175,7 @@ Results to evaluate:
 
 # ── Step 3: Build HTML Email ──────────────────────────────────────────────────
 
-SOURCE_ICONS = {"YouTube": "▶", "Reddit": "◉", "Web": "◈"}
+SOURCE_ICONS        = {"YouTube": "▶", "Reddit": "◉", "Web": "◈"}
 SOURCE_BADGE_COLORS = {"YouTube": "#ff0000", "Reddit": "#ff4500", "Web": "#4a5568"}
 
 
@@ -226,10 +227,10 @@ def render_region_block(articles: list, label: str, flag: str) -> str:
 
 
 def build_brand_card(comp: dict, articles: list) -> str:
-    color        = comp["color"]
-    name         = comp["name"]
-    india_arts   = [a for a in articles if a.get("region") == "India"]
-    global_arts  = [a for a in articles if a.get("region") != "India"]
+    color      = comp["color"]
+    name       = comp["name"]
+    india_arts = [a for a in articles if a.get("region") == "India"]
+    global_arts = [a for a in articles if a.get("region") != "India"]
 
     count_pill = (
         f'<span style="background:rgba(255,255,255,0.25);color:#fff;font-size:10px;font-weight:700;'
@@ -311,11 +312,11 @@ def build_html(all_data: list, date_str: str) -> str:
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#60a5fa;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Connected Auto</p>
         <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🚗 Dashcam Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; Last 24 hours</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; Last 48 hours</p>
         <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
             <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
-              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} mentions &nbsp;·&nbsp; {active_brands} active brands today</span>
+              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} mentions &nbsp;·&nbsp; {active_brands} active brands</span>
             </td>
           </tr>
         </table>
@@ -332,7 +333,7 @@ def build_html(all_data: list, date_str: str) -> str:
   </table>
 
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
-    <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands Today</p></td></tr>
+    <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands</p></td></tr>
   </table>
 
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">{grid_rows}</table>
