@@ -20,9 +20,7 @@ BREVO_API_KEY = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
-    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
-    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
-    {"email": "megha.gupta@heroelectronix.com",             "name": "Megha"},
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
 ]
 SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
