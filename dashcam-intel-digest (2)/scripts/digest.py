@@ -115,15 +115,19 @@ def serper_search(query: str, search_type: str = "search") -> list:
 
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
-    exclusions = "-site:msn.com -site:yahoo.com -site:flipboard.com"
+    exclusions = "-site:msn.com -site:yahoo.com -site:amazon.in -site:flipkart.com"
     for q in competitor["queries"]:
-        all_results += serper_search(f"{q} {exclusions}", "news")
-        all_results += serper_search(f"{q} site:youtube.com", "videos")
-        all_results += serper_search(f"{q} site:reddit.com", "search")
-    all_results = [
-        r for r in all_results
-        if is_within_48h(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))
-    ]
+        # News and Reddit — strict date filter
+        news    = serper_search(f"{q} {exclusions}", "news")
+        reddit  = serper_search(f"{q} site:reddit.com {exclusions}", "search")
+        news    = [r for r in news   if is_recent(r.get("date","")) and not is_excluded_domain(r.get("link",""))]
+        reddit  = [r for r in reddit if is_recent(r.get("date","")) and not is_excluded_domain(r.get("link",""))]
+        all_results += news + reddit
+
+        # YouTube — no date filter, pass everything to Claude
+        youtube = serper_search(f"{q} site:youtube.com", "videos")
+        all_results += youtube
+
     seen = set()
     unique = []
     for r in all_results:
@@ -131,7 +135,6 @@ def fetch_all_mentions(competitor: dict) -> list:
             seen.add(r["link"])
             unique.append(r)
     return unique
-
 
 # ── Step 2: Filter & Summarise with Claude ────────────────────────────────────
 
