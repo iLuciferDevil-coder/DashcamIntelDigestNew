@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 Qubo Home Security Camera Intel Digest
-- Searches Web, YouTube, and Reddit for competitor mentions in the last 48h
-- Uses Claude to filter noise and summarise relevance
+- Searches Web, YouTube (influencer tracking), and Reddit
+- Web + Reddit: strict 48h date filter
+- YouTube: no date filter — passed to Claude for influencer intelligence
+- Ecommerce sites blocked
 - India-only focus
-- Runs twice a week (Tuesday + Friday) — home security news is sparse daily
+- Runs twice a week (Tuesday + Friday)
 - 2-column grid layout, zero-mention brands hidden
 - Sends a beautiful HTML email via Brevo
 """
@@ -20,7 +22,9 @@ BREVO_API_KEY = os.environ["BREVO_API_KEY"]
 ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
-    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
+    {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
+    {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
+    {"email": "megha.gupta@heroelectronix.com",             "name": "Megha"},
 ]
 SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
@@ -30,7 +34,14 @@ IST = timezone(timedelta(hours=5, minutes=30))
 EXCLUDED_DOMAINS = [
     "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
     "upstox.com", "goodreturns.in", "indiainfoline.com",
+    "amazon.in", "amazon.com", "flipkart.com", "snapdeal.com",
+    "meesho.com", "jiomart.com", "tatacliq.com", "croma.com",
+    "vijaysales.com", "shopclues.com", "ebay.com", "ebay.in",
+    "paytmmall.com",
 ]
+
+CURRENT_YEAR = str(datetime.now(timezone(timedelta(hours=5, minutes=30))).year)
+OLD_YEARS    = ["2019", "2020", "2021", "2022", "2023", "2024"]
 
 COMPETITORS = [
     {
@@ -123,15 +134,24 @@ TAG_COLORS = {
 
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
-def is_within_48h(date_str: str) -> bool:
+def is_recent(date_str: str) -> bool:
+    """Strict date filter for web and Reddit results."""
     if not date_str:
-        return True
+        return False
     d = date_str.lower().strip()
+    if any(x in d for x in ["hour", "minute", "just now", "second"]):
+        return True
+    if "1 day ago" in d or "2 day" in d:
+        return True
+    if CURRENT_YEAR in d:
+        return True
+    if any(yr in d for yr in OLD_YEARS):
+        return False
     if any(x in d for x in ["week", "month", "year"]):
         return False
     if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
         return False
-    return True
+    return False
 
 
 def is_excluded_domain(link: str) -> bool:
@@ -178,15 +198,23 @@ def serper_search(query: str, search_type: str = "search") -> list:
 
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
-    exclusions = "-site:msn.com -site:yahoo.com -site:flipboard.com"
+    exclusions = "-site:msn.com -site:yahoo.com -site:amazon.in -site:flipkart.com"
+
     for q in competitor["queries"]:
-        all_results += serper_search(f"{q} {exclusions}", "news")
-        all_results += serper_search(f"{q} site:youtube.com", "videos")
-        all_results += serper_search(f"{q} site:reddit.com", "search")
-    all_results = [
-        r for r in all_results
-        if is_within_48h(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))
-    ]
+        # Web news — strict date + domain filter
+        news = serper_search(f"{q} {exclusions}", "news")
+        news = [r for r in news if is_recent(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))]
+        all_results += news
+
+        # Reddit — strict date + domain filter
+        reddit = serper_search(f"{q} site:reddit.com", "search")
+        reddit = [r for r in reddit if is_recent(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))]
+        all_results += reddit
+
+        # YouTube — NO date filter, pass all to Claude for influencer tracking
+        youtube = serper_search(f"{q} site:youtube.com", "videos")
+        all_results += youtube
+
     seen = set()
     unique = []
     for r in all_results:
@@ -219,19 +247,21 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian home security camera brand (part of Hero Group).
 
-I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
+I have fetched the following recent mentions of competitor "{name}" from the web, Reddit, and YouTube.
 Today's date is {today}.
 
 Your task:
 1. Keep ONLY results clearly about home security cameras, CCTV cameras, indoor cameras, outdoor cameras, IP cameras, PTZ cameras, NVR/DVR systems, or WiFi surveillance cameras for "{name}" in the INDIAN market.
-2. Discard anything that is:
+2. For WEB and REDDIT results: discard anything published in {", ".join(OLD_YEARS)} — these are too old.
+3. For YOUTUBE results: keep if the video is a review, unboxing, comparison, or installation demo of "{name}" home security camera by an Indian influencer or tech channel. These are valuable for influencer tracking even if older.
+4. Discard anything that is:
    - Not about cameras or surveillance (e.g. Godrej locks, Zebronics speakers, Honeywell thermostats, TP-Link routers)
-   - Not relevant to India
    - About smart doorbells or video doorbells
-   - Generic evergreen buying guides with no new information
-3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security business in India.
-4. Classify each result into one of: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
-5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
+   - Ecommerce listings (Amazon, Flipkart, etc.)
+   - Not relevant to India
+5. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security business.
+6. Classify each result into one of: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
+7. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
 [
@@ -411,7 +441,7 @@ def build_html(all_data: list, date_str: str) -> str:
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1a3a2a 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#34d399;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Home Security</p>
         <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🏠 Home Security Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India · Last 48 hours</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India · Last 48 hours + YouTube</p>
         <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
             <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
@@ -496,7 +526,7 @@ def main():
 
     all_data = []
     for comp in COMPETITORS:
-        print(f"[{comp['name']}] Fetching mentions...")
+        print(f"[{comp['name']}] Fetching mentions (Web + YouTube + Reddit)...")
         raw = fetch_all_mentions(comp)
         print(f"  Raw results: {len(raw)}")
         if raw:
