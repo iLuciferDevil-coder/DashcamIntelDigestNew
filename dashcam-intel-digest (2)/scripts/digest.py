@@ -448,11 +448,14 @@ def main():
     date_str = now.strftime("%A, %d %B %Y")
     print(f"\n{'='*60}\nQubo Dashcam Intel Digest — {date_str}\n{'='*60}\n")
 
-    all_data = []
+all_data = []
     for comp in COMPETITORS:
         print(f"[{comp['name']}] Fetching mentions (Web + YouTube + Reddit)...")
         raw = fetch_all_mentions(comp)
         print(f"  Raw results: {len(raw)}")
+        if raw:
+            print(f"  Sample dates: {[r.get('date','NO_DATE') for r in raw[:3]]}")
+            print(f"  Sample titles: {[r.get('title','')[:50] for r in raw[:2]]}")
         filtered = filter_and_summarise(comp, raw)
         print(f"  Relevant: {len(filtered)}")
         all_data.append({"competitor": comp, "articles": filtered})
