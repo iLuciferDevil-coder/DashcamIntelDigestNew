@@ -159,16 +159,18 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian dashcam brand.
 
-I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
+I have fetched the following recent mentions of competitor "{name}" from the web, Reddit, and YouTube.
 Today's date is {today}.
 
 Your task:
-1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything published before {datetime.now(IST).strftime("%Y")} — articles from 2019, 2020, 2021, 2022, 2023, 2024, 2025 must be rejected.
-3. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
-4. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-5. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
-6. Return ONLY a JSON array. No preamble, no markdown, no explanation.
+1. Keep ONLY results relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
+2. For WEB and REDDIT results: discard anything published in {", ".join(OLD_YEARS)} — too old.
+3. For YOUTUBE results: keep if the video title suggests a review, unboxing, comparison, or feature demo of "{name}" dashcam. Discard only if clearly unrelated to dashcams.
+4. Discard ecommerce listings (Amazon, Flipkart, etc.) — news, reviews, and discussions only.
+5. Discard other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom).
+6. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
+7. Tag each result as "India" if clearly about the Indian market, or "Global" otherwise.
+8. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
 [
