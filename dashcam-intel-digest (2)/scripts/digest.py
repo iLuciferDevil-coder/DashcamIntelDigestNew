@@ -161,10 +161,11 @@ Today's date is {today}.
 
 Your task:
 1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
-3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-4. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
-5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
+2. Discard anything published before {datetime.now(IST).strftime("%Y")} — articles from 2019, 2020, 2021, 2022, 2023, 2024, 2025 must be rejected.
+3. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
+4. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
+5. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
+6. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
 [
