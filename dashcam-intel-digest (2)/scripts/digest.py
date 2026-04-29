@@ -48,6 +48,17 @@ COMPETITORS = [
 
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
+def is_within_24h(date_str: str) -> bool:
+    if not date_str:
+        return True
+    d = date_str.lower().strip()
+    if any(x in d for x in ["week", "month", "year"]):
+        return False
+    if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
+        return False
+    return True
+
+
 def serper_search(query: str, search_type: str = "search") -> list:
     endpoint_map = {
         "search": "https://google.serper.dev/search",
@@ -61,6 +72,7 @@ def serper_search(query: str, search_type: str = "search") -> list:
         "hl": "en",
         "num": 5,
         "tbs": "qdr:d",
+        "location": "India",
     }
     headers = {
         "X-API-KEY": SERPER_API_KEY,
@@ -91,6 +103,7 @@ def fetch_all_mentions(competitor: dict) -> list:
         all_results += serper_search(q, "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
+    all_results = [r for r in all_results if is_within_24h(r.get("date", ""))]
     seen = set()
     unique = []
     for r in all_results:
@@ -115,20 +128,26 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
         return []
 
     name = competitor["name"]
+    today = datetime.now(IST).strftime("%d %B %Y")
     articles_text = "\n\n".join([
-        f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nSnippet: {r['snippet']}\nURL: {r['link']}"
+        f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nDate: {r.get('date','unknown')}\nSnippet: {r['snippet']}\nURL: {r['link']}"
         for i, r in enumerate(raw_results[:15])
     ])
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian dashcam brand.
 
 I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
+Today's date is {today}.
 
 Your task:
 1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
+2. Discard anything that is:
+   - Published or dated more than 24 hours ago (today is {today})
+   - Not clearly from or about India (must have Indian prices in ₹, Indian publication/channel, mention of India/Indian city, or .in domain)
+   - About other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans)
+   - Generic evergreen buying guides with no new information
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-4. Tag each result as "India" if it is clearly about the Indian market (Indian prices, Indian reviewers, India launches, .in domains, mentions of India/Indian cities), or "Global" otherwise.
+4. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
@@ -448,12 +467,12 @@ def main():
     print("  Saved digest-preview.html (check Actions artifacts)")
 
     total_mentions = sum(len(d["articles"]) for d in all_data)
-if total_mentions == 0:
-    print("\nNo mentions found today — skipping send. No blank digest delivered.")
-else:
-    print("Sending via Brevo...")
-    send_email(html, date_str)
-    print("\nDone ✓")
+    if total_mentions == 0:
+        print("\nNo mentions found today — skipping send. No blank digest delivered.")
+    else:
+        print("Sending via Brevo...")
+        send_email(html, date_str)
+        print("\nDone ✓")
 
 
 if __name__ == "__main__":
