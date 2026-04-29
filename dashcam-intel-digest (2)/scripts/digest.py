@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Qubo Dashcam Competitor Intelligence Digest
-- Searches Web, YouTube, and Reddit for competitor mentions in the last 24h
+- Searches NewsData.io for competitor mentions in the last 24h
 - Uses Claude to filter noise and summarise relevance
 - Tags each mention as India or Global
 - 2-column grid layout, zero-mention brands hidden
@@ -15,9 +15,9 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
-SERPER_API_KEY = os.environ["SERPER_API_KEY"]
+BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY  = os.environ["ANTHROPIC_API_KEY"]
+NEWSDATA_KEY   = os.environ["NEWSDATA_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"}
 ]
@@ -27,85 +27,63 @@ SENDER_NAME  = "Qubo Intel Bot"
 IST = timezone(timedelta(hours=5, minutes=30))
 
 COMPETITORS = [
-    {"name": "70mai",       "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
-    {"name": "DDPai",       "color": "#8b5cf6", "queries": ["DDPai dashcam India", "DDPai dash camera review"]},
-    {"name": "CP Plus",     "color": "#ef4444", "queries": ["CP Plus dashcam India", "CP Plus dash camera car"]},
-    {"name": "boAt",        "color": "#06b6d4", "queries": ["boAt dashcam India", "boAt Hive dashcam"]},
-    {"name": "Jio EyeQ",   "color": "#10b981", "queries": ["Jio EyeQ dashcam", "Jio EyeQ dash camera India"]},
-    {"name": "Viofo",       "color": "#f59e0b", "queries": ["Viofo dashcam India", "Viofo dash camera"]},
-    {"name": "Redtiger",    "color": "#ec4899", "queries": ["Redtiger dashcam India", "Redtiger dash cam"]},
-    {"name": "Blaupunkt",   "color": "#1d4ed8", "queries": ["Blaupunkt dashcam India", "Blaupunkt dash camera"]},
-    {"name": "Nexdigitron", "color": "#7c3aed", "queries": ["Nexdigitron dashcam India", "Nexdigitron dash camera"]},
-    {"name": "Fleet Track", "color": "#b45309", "queries": ["Fleet Track dashcam India", "Fleet Track dash camera GPS"]},
-    {"name": "Onelap",      "color": "#0369a1", "queries": ["Onelap dashcam India", "Onelap dash camera"]},
-    {"name": "TrueView",    "color": "#047857", "queries": ["TrueView dashcam India", "TrueView dash camera"]},
-    {"name": "Philips",     "color": "#0ea5e9", "queries": ["Philips dashcam India", "Philips dash camera ADR"]},
-    {"name": "Garmin",      "color": "#16a34a", "queries": ["Garmin dashcam India", "Garmin Dash Cam"]},
-    {"name": "Qubo",        "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
+    {"name": "70mai",       "color": "#f97316", "query": "70mai dashcam"},
+    {"name": "DDPai",       "color": "#8b5cf6", "query": "DDPai dashcam"},
+    {"name": "CP Plus",     "color": "#ef4444", "query": "CP Plus dashcam"},
+    {"name": "boAt",        "color": "#06b6d4", "query": "boAt dashcam OR boAt Hive dashcam"},
+    {"name": "Jio EyeQ",   "color": "#10b981", "query": "Jio EyeQ dashcam"},
+    {"name": "Viofo",       "color": "#f59e0b", "query": "Viofo dashcam"},
+    {"name": "Redtiger",    "color": "#ec4899", "query": "Redtiger dashcam"},
+    {"name": "Blaupunkt",   "color": "#1d4ed8", "query": "Blaupunkt dashcam"},
+    {"name": "Nexdigitron", "color": "#7c3aed", "query": "Nexdigitron dashcam"},
+    {"name": "Fleet Track", "color": "#b45309", "query": "Fleet Track dashcam"},
+    {"name": "Onelap",      "color": "#0369a1", "query": "Onelap dashcam"},
+    {"name": "TrueView",    "color": "#047857", "query": "TrueView dashcam"},
+    {"name": "Philips",     "color": "#0ea5e9", "query": "Philips dashcam"},
+    {"name": "Garmin",      "color": "#16a34a", "query": "Garmin dashcam"},
+    {"name": "Qubo",        "color": "#3b82f6", "query": "Qubo dashcam OR Qubo dash camera"},
 ]
 
-# ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
+# ── Step 1: Fetch from NewsData.io ────────────────────────────────────────────
 
-def is_within_24h(date_str: str) -> bool:
-    if not date_str:
-        return True
-    d = date_str.lower().strip()
-    if any(x in d for x in ["week", "month", "year"]):
-        return False
-    if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
-        return False
-    return True
-
-
-def serper_search(query: str, search_type: str = "search") -> list:
-    endpoint_map = {
-        "search": "https://google.serper.dev/search",
-        "news":   "https://google.serper.dev/news",
-        "videos": "https://google.serper.dev/videos",
-    }
-    url = endpoint_map.get(search_type, endpoint_map["search"])
-    payload = {
-        "q": query,
-        "gl": "in",
-        "hl": "en",
-        "num": 5,
-        "tbs": "qdr:d",
-        "location": "India",
-    }
-    headers = {
-        "X-API-KEY": SERPER_API_KEY,
-        "Content-Type": "application/json",
-    }
+def newsdata_search(query: str) -> list:
+    """Search NewsData.io for articles from last 24h."""
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=15)
+        resp = requests.get(
+            "https://newsdata.io/api/1/news",
+            params={
+                "apikey":   NEWSDATA_KEY,
+                "q":        query,
+                "language": "en",
+                "country":  "in",
+                "timeframe": 24,  # last 24 hours
+                "size":     5,
+            },
+            timeout=15,
+        )
         resp.raise_for_status()
         data = resp.json()
         results = []
-        for item in data.get("organic", []) + data.get("news", []) + data.get("videos", []):
+        for item in data.get("results", []):
             results.append({
                 "title":   item.get("title", ""),
-                "snippet": item.get("snippet", item.get("description", "")),
-                "link":    item.get("link", item.get("videoUrl", "")),
-                "source":  item.get("source", item.get("channel", "Unknown")),
-                "date":    item.get("date", item.get("publishedAt", "")),
+                "snippet": item.get("description", "") or item.get("content", "")[:200],
+                "link":    item.get("link", ""),
+                "source":  item.get("source_id", "Unknown"),
+                "date":    item.get("pubDate", ""),
             })
         return results
     except Exception as e:
-        print(f"    Serper error ({search_type}, '{query}'): {e}")
+        print(f"    NewsData error ('{query}'): {e}")
         return []
 
 
 def fetch_all_mentions(competitor: dict) -> list:
-    all_results = []
-    for q in competitor["queries"]:
-        all_results += serper_search(q, "news")
-        all_results += serper_search(f"{q} site:youtube.com", "videos")
-        all_results += serper_search(f"{q} site:reddit.com", "search")
-    all_results = [r for r in all_results if is_within_24h(r.get("date", ""))]
+    results = newsdata_search(competitor["query"])
     seen = set()
     unique = []
-    for r in all_results:
-        if r["link"] not in seen:
+    for r in results:
+        if r["link"] not in seen and r["title"]:
             seen.add(r["link"])
             unique.append(r)
     return unique
@@ -125,23 +103,23 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
     if not raw_results:
         return []
 
-    name = competitor["name"]
+    name  = competitor["name"]
     today = datetime.now(IST).strftime("%d %B %Y")
     articles_text = "\n\n".join([
         f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nDate: {r.get('date','unknown')}\nSnippet: {r['snippet']}\nURL: {r['link']}"
-        for i, r in enumerate(raw_results[:15])
+        for i, r in enumerate(raw_results[:10])
     ])
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian dashcam brand.
 
-I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
+I have fetched the following recent news mentions of competitor "{name}".
 Today's date is {today}.
 
 Your task:
-1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
+1. Keep ONLY results relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
+2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom).
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-4. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
+4. Tag each result as "India" if clearly about the Indian market, or "Global" otherwise.
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
@@ -166,14 +144,14 @@ Results to evaluate:
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": ANTHROPIC_KEY,
+                "x-api-key":         ANTHROPIC_KEY,
                 "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "content-type":      "application/json",
             },
             json={
-                "model": "claude-haiku-4-5",
+                "model":      "claude-haiku-4-5",
                 "max_tokens": 1500,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages":   [{"role": "user", "content": prompt}],
             },
             timeout=30,
         )
@@ -196,17 +174,8 @@ Results to evaluate:
 
 # ── Step 3: Build HTML Email ──────────────────────────────────────────────────
 
-SOURCE_ICONS = {
-    "YouTube": "▶",
-    "Reddit":  "◉",
-    "Web":     "◈",
-}
-
-SOURCE_BADGE_COLORS = {
-    "YouTube": "#ff0000",
-    "Reddit":  "#ff4500",
-    "Web":     "#4a5568",
-}
+SOURCE_ICONS = {"YouTube": "▶", "Reddit": "◉", "Web": "◈"}
+SOURCE_BADGE_COLORS = {"YouTube": "#ff0000", "Reddit": "#ff4500", "Web": "#4a5568"}
 
 
 def render_article_row(art: dict) -> str:
@@ -261,20 +230,16 @@ def build_brand_card(comp: dict, articles: list) -> str:
     name         = comp["name"]
     india_arts   = [a for a in articles if a.get("region") == "India"]
     global_arts  = [a for a in articles if a.get("region") != "India"]
-    india_count  = len(india_arts)
-    global_count = len(global_arts)
 
     count_pill = (
         f'<span style="background:rgba(255,255,255,0.25);color:#fff;font-size:10px;font-weight:700;'
         f'padding:2px 8px;border-radius:20px;margin-left:6px;white-space:nowrap;">'
-        f'🇮🇳{india_count} · 🌐{global_count}</span>'
+        f'🇮🇳{len(india_arts)} · 🌐{len(global_arts)}</span>'
     )
-
     card_body = (
         render_region_block(india_arts, "India", "🇮🇳") +
         render_region_block(global_arts, "Global", "🌐")
     )
-
     return f"""
         <table width="100%" cellpadding="0" cellspacing="0" style="border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
           <tr>
@@ -290,8 +255,7 @@ def build_brand_card(comp: dict, articles: list) -> str:
 def build_html(all_data: list, date_str: str) -> str:
     total_mentions = sum(len(d["articles"]) for d in all_data)
     active_brands  = sum(1 for d in all_data if d["articles"])
-
-    active_data = [d for d in all_data if d["articles"] and d["competitor"]["name"] != "Qubo"]
+    active_data    = [d for d in all_data if d["articles"] and d["competitor"]["name"] != "Qubo"]
 
     summary_items = "".join([
         f'<td style="padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;" valign="middle">'
@@ -305,11 +269,9 @@ def build_html(all_data: list, date_str: str) -> str:
     for i in range(0, len(active_data), 2):
         left  = active_data[i]
         right = active_data[i + 1] if i + 1 < len(active_data) else None
-
         left_card  = build_brand_card(left["competitor"], left["articles"])
         right_card = build_brand_card(right["competitor"], right["articles"]) if right else ""
         right_td   = f'<td width="49%" valign="top">{right_card}</td>' if right else '<td width="49%"></td>'
-
         grid_rows += f"""
         <tr>
           <td style="padding-bottom:16px;">
@@ -323,22 +285,16 @@ def build_html(all_data: list, date_str: str) -> str:
           </td>
         </tr>"""
 
-    qubo_data = next((d for d in all_data if d["competitor"]["name"] == "Qubo"), None)
+    qubo_data    = next((d for d in all_data if d["competitor"]["name"] == "Qubo"), None)
     qubo_section = ""
     if qubo_data and qubo_data["articles"]:
-        qubo_card = build_brand_card(qubo_data["competitor"], qubo_data["articles"])
+        qubo_card    = build_brand_card(qubo_data["competitor"], qubo_data["articles"])
         qubo_section = f"""
         <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
-          <tr>
-            <td>
-              <p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">🔵 Qubo — Self Monitor</p>
-            </td>
-          </tr>
+          <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">🔵 Qubo — Self Monitor</p></td></tr>
         </table>
         <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-          <tr>
-            <td style="padding-bottom:16px;">{qubo_card}</td>
-          </tr>
+          <tr><td style="padding-bottom:16px;">{qubo_card}</td></tr>
         </table>"""
 
     return f"""<!DOCTYPE html>
@@ -347,11 +303,9 @@ def build_html(all_data: list, date_str: str) -> str:
 <title>Dashcam Intel Digest — {date_str}</title>
 </head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 0;">
 <tr><td align="center">
 
-  <!-- Header -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
     <tr>
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:16px;padding:28px 36px;text-align:center;">
@@ -369,41 +323,28 @@ def build_html(all_data: list, date_str: str) -> str:
     </tr>
   </table>
 
-  <!-- Brand summary bar -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
     <tr>
       <td style="padding:12px 4px;">
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>{summary_items}</tr>
-        </table>
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>{summary_items}</tr></table>
       </td>
     </tr>
   </table>
 
-  <!-- Section label -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
-    <tr>
-      <td>
-        <p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands Today</p>
-      </td>
-    </tr>
+    <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands Today</p></td></tr>
   </table>
 
-  <!-- 2-column grid (competitors only) -->
-  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">
-    {grid_rows}
-  </table>
+  <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">{grid_rows}</table>
 
-  <!-- Qubo full-width section -->
   {qubo_section}
 
-  <!-- Footer -->
   <table width="640" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
     <tr>
       <td style="padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.7;">
           Auto-generated daily at 9:00 AM IST by Qubo Intel Bot<br>
-          Powered by Serper · Filtered by Claude AI · Delivered via Brevo<br>
+          Powered by NewsData.io · Filtered by Claude AI · Delivered via Brevo<br>
           <span style="color:#d1d5db;">Hero Electronix Pvt. Ltd.</span>
         </p>
       </td>
@@ -446,12 +387,11 @@ def main():
 
     all_data = []
     for comp in COMPETITORS:
-        print(f"[{comp['name']}] Fetching mentions (Web + YouTube + Reddit)...")
+        print(f"[{comp['name']}] Fetching mentions...")
         raw = fetch_all_mentions(comp)
         print(f"  Raw results: {len(raw)}")
         if raw:
-            print(f"  Sample dates: {[r.get('date', 'NO_DATE') for r in raw[:3]]}")
-            print(f"  Sample titles: {[r.get('title', '')[:50] for r in raw[:2]]}")
+            print(f"  Sample: {raw[0]['title'][:60]}")
         filtered = filter_and_summarise(comp, raw)
         print(f"  Relevant: {len(filtered)}")
         all_data.append({"competitor": comp, "articles": filtered})
@@ -461,7 +401,7 @@ def main():
 
     with open("digest-preview.html", "w") as f:
         f.write(html)
-    print("  Saved digest-preview.html (check Actions artifacts)")
+    print("  Saved digest-preview.html")
 
     total_mentions = sum(len(d["articles"]) for d in all_data)
     if total_mentions == 0:
