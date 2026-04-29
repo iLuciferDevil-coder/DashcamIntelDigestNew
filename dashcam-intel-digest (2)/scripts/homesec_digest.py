@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Qubo Home Security Camera Intel Digest
-- Searches NewsData.io for competitor mentions in India (last 24h)
+- Searches Web, YouTube, and Reddit for competitor mentions (last 4 days)
 - Uses Claude to filter noise and summarise relevance
 - India-only focus
+- Runs twice a week (Tuesday + Friday)
 - 2-column grid layout, zero-mention brands hidden
 - Sends a beautiful HTML email via Brevo
 """
@@ -15,9 +16,9 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
-NEWSDATA_KEY  = os.environ["NEWSDATA_API_KEY"]
+BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY  = os.environ["ANTHROPIC_API_KEY"]
+SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
     {"email": "rachit.mehra@heroelectronix.com",            "name": "Rachit"},
@@ -28,22 +29,87 @@ SENDER_NAME  = "Qubo Intel Bot"
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
+EXCLUDED_DOMAINS = [
+    "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
+    "upstox.com", "goodreturns.in", "indiainfoline.com",
+]
+
 COMPETITORS = [
-    {"name": "CP Plus",     "color": "#ef4444", "query": "CP Plus security camera OR CP Plus CCTV"},
-    {"name": "Hikvision",   "color": "#b91c1c", "query": "Hikvision camera India OR Hikvision CCTV India"},
-    {"name": "Dahua",       "color": "#7c3aed", "query": "Dahua camera India OR Dahua CCTV India"},
-    {"name": "Godrej",      "color": "#1d4ed8", "query": "Godrej security camera OR Godrej CCTV"},
-    {"name": "TP-Link Tapo","color": "#0369a1", "query": "Tapo camera India OR TP-Link Tapo security"},
-    {"name": "Imou",        "color": "#059669", "query": "Imou camera India OR Imou security camera"},
-    {"name": "Trueview",    "color": "#047857", "query": "Trueview security camera OR Trueview CCTV"},
-    {"name": "Zebronics",   "color": "#f59e0b", "query": "Zebronics security camera OR Zebronics CCTV"},
-    {"name": "Secureye",    "color": "#ec4899", "query": "Secureye camera OR Secureye CCTV India"},
-    {"name": "HiFocus",     "color": "#0891b2", "query": "HiFocus camera OR HiFocus CCTV India"},
-    {"name": "Uniview",     "color": "#6d28d9", "query": "Uniview camera India OR Uniview CCTV India"},
-    {"name": "Prama",       "color": "#b45309", "query": "Prama camera India OR MiEye Prama"},
-    {"name": "Bosch",       "color": "#374151", "query": "Bosch security camera India OR Bosch CCTV India"},
-    {"name": "Honeywell",   "color": "#dc2626", "query": "Honeywell security camera India OR Honeywell CCTV India"},
-    {"name": "Qubo",        "color": "#3b82f6", "query": "Qubo home security camera OR Qubo smart camera"},
+    {
+        "name": "CP Plus",
+        "color": "#ef4444",
+        "queries": ["CP Plus home security camera India", "CP Plus WiFi camera India", "CP Plus CCTV India"],
+    },
+    {
+        "name": "Hikvision",
+        "color": "#b91c1c",
+        "queries": ["Hikvision camera India", "Hikvision CCTV India", "Hikvision WiFi camera India"],
+    },
+    {
+        "name": "Dahua",
+        "color": "#7c3aed",
+        "queries": ["Dahua camera India", "Dahua CCTV India", "Dahua WiFi camera India"],
+    },
+    {
+        "name": "Godrej",
+        "color": "#1d4ed8",
+        "queries": ["Godrej security camera India", "Godrej CCTV India"],
+    },
+    {
+        "name": "TP-Link Tapo",
+        "color": "#0369a1",
+        "queries": ["Tapo camera India", "TP-Link Tapo security camera India"],
+    },
+    {
+        "name": "Imou",
+        "color": "#059669",
+        "queries": ["Imou camera India", "Imou security camera India"],
+    },
+    {
+        "name": "Trueview",
+        "color": "#047857",
+        "queries": ["Trueview security camera India", "Trueview CCTV India"],
+    },
+    {
+        "name": "Zebronics",
+        "color": "#f59e0b",
+        "queries": ["Zebronics security camera India", "Zebronics WiFi camera India"],
+    },
+    {
+        "name": "Secureye",
+        "color": "#ec4899",
+        "queries": ["Secureye camera India", "Secureye CCTV India"],
+    },
+    {
+        "name": "HiFocus",
+        "color": "#0891b2",
+        "queries": ["HiFocus camera India", "HiFocus CCTV India"],
+    },
+    {
+        "name": "Uniview",
+        "color": "#6d28d9",
+        "queries": ["Uniview camera India", "Uniview CCTV India"],
+    },
+    {
+        "name": "Prama",
+        "color": "#b45309",
+        "queries": ["Prama security camera India", "MiEye Prama camera India"],
+    },
+    {
+        "name": "Bosch",
+        "color": "#374151",
+        "queries": ["Bosch security camera India", "Bosch CCTV India"],
+    },
+    {
+        "name": "Honeywell",
+        "color": "#dc2626",
+        "queries": ["Honeywell security camera India", "Honeywell CCTV India"],
+    },
+    {
+        "name": "Qubo",
+        "color": "#3b82f6",
+        "queries": ["Qubo home security camera India", "Qubo smart camera India", "Qubo WiFi camera India"],
+    },
 ]
 
 TAG_COLORS = {
@@ -57,45 +123,63 @@ TAG_COLORS = {
     "Partnership":        "#1d4ed8",
 }
 
-# ── Step 1: Fetch from NewsData.io ────────────────────────────────────────────
+# ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
-def newsdata_search(query: str) -> list:
+def is_excluded_domain(link: str) -> bool:
+    return any(domain in link for domain in EXCLUDED_DOMAINS)
+
+
+def serper_search(query: str, search_type: str = "search") -> list:
+    endpoint_map = {
+        "search": "https://google.serper.dev/search",
+        "news":   "https://google.serper.dev/news",
+        "videos": "https://google.serper.dev/videos",
+    }
+    url = endpoint_map.get(search_type, endpoint_map["search"])
+    payload = {
+        "q":   query,
+        "gl":  "in",
+        "hl":  "en",
+        "num": 5,
+        "tbs": "qdr:4d",
+        "location": "India",
+    }
+    headers = {
+        "X-API-KEY":    SERPER_API_KEY,
+        "Content-Type": "application/json",
+    }
     try:
-        resp = requests.get(
-            "https://newsdata.io/api/1/news",
-            params={
-                "apikey":    NEWSDATA_KEY,
-                "q":         query,
-                "language":  "en",
-                "country":   "in",
-                "timeframe": 24,
-                "size":      5,
-            },
-            timeout=15,
-        )
+        resp = requests.post(url, headers=headers, json=payload, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         results = []
-        for item in data.get("results", []):
+        for item in data.get("organic", []) + data.get("news", []) + data.get("videos", []):
             results.append({
                 "title":   item.get("title", ""),
-                "snippet": item.get("description", "") or item.get("content", "")[:200],
-                "link":    item.get("link", ""),
-                "source":  item.get("source_id", "Unknown"),
-                "date":    item.get("pubDate", ""),
+                "snippet": item.get("snippet", item.get("description", "")),
+                "link":    item.get("link", item.get("videoUrl", "")),
+                "source":  item.get("source", item.get("channel", "Unknown")),
+                "date":    item.get("date", item.get("publishedAt", "")),
             })
         return results
     except Exception as e:
-        print(f"    NewsData error ('{query}'): {e}")
+        print(f"    Serper error ({search_type}, '{query}'): {e}")
         return []
 
 
 def fetch_all_mentions(competitor: dict) -> list:
-    results = newsdata_search(competitor["query"])
+    all_results = []
+    for q in competitor["queries"]:
+        all_results += serper_search(q, "news")
+        all_results += serper_search(f"{q} site:youtube.com", "videos")
+        all_results += serper_search(f"{q} site:reddit.com", "search")
+
+    all_results = [r for r in all_results if not is_excluded_domain(r.get("link", ""))]
+
     seen = set()
     unique = []
-    for r in results:
-        if r["link"] not in seen and r["title"]:
+    for r in all_results:
+        if r["link"] not in seen:
             seen.add(r["link"])
             unique.append(r)
     return unique
@@ -119,23 +203,23 @@ def filter_and_summarise(competitor: dict, raw_results: list) -> list:
     today = datetime.now(IST).strftime("%d %B %Y")
     articles_text = "\n\n".join([
         f"[{i+1}] Title: {r['title']}\nSource: {r['source']}\nDate: {r.get('date','unknown')}\nSnippet: {r['snippet']}\nURL: {r['link']}"
-        for i, r in enumerate(raw_results[:10])
+        for i, r in enumerate(raw_results[:15])
     ])
 
     prompt = f"""You are a competitive intelligence analyst for Qubo, an Indian home security camera brand (part of Hero Group).
 
-I have fetched the following recent news mentions of competitor "{name}".
+I have fetched the following recent mentions of competitor "{name}" from the web, YouTube, and Reddit.
 Today's date is {today}.
 
 Your task:
 1. Keep ONLY results clearly about home security cameras, CCTV cameras, indoor cameras, outdoor cameras, IP cameras, PTZ cameras, NVR/DVR systems, or WiFi surveillance cameras for "{name}" in the INDIAN market.
 2. Discard anything that is:
+   - Not clearly from or about India (must have Indian prices in ₹, Indian publication/channel, mention of India/Indian city, or .in domain)
    - Not about cameras or surveillance (e.g. Godrej locks, Zebronics speakers, Honeywell thermostats, TP-Link routers)
-   - Not relevant to India
    - About smart doorbells or video doorbells
    - Generic evergreen buying guides with no new information
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security business in India.
-4. Classify each result into one of: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
+4. Classify each result: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
@@ -190,7 +274,7 @@ Results to evaluate:
 
 # ── Step 3: Build HTML Email ──────────────────────────────────────────────────
 
-SOURCE_ICONS       = {"YouTube": "▶", "Reddit": "◉", "Web": "◈"}
+SOURCE_ICONS        = {"YouTube": "▶", "Reddit": "◉", "Web": "◈"}
 SOURCE_BADGE_COLORS = {"YouTube": "#ff0000", "Reddit": "#ff4500", "Web": "#4a5568"}
 
 
@@ -316,11 +400,11 @@ def build_html(all_data: list, date_str: str) -> str:
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1a3a2a 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#34d399;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Home Security</p>
         <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🏠 Home Security Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India Only · Last 24 hours</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India Only · Last 4 days</p>
         <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
             <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
-              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} mentions &nbsp;·&nbsp; {active_brands} active brands today</span>
+              <span style="color:#f8fafc;font-size:13px;font-weight:600;">{total_mentions} mentions &nbsp;·&nbsp; {active_brands} active brands</span>
             </td>
           </tr>
         </table>
@@ -346,7 +430,7 @@ def build_html(all_data: list, date_str: str) -> str:
   </table>
 
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto 14px;">
-    <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands Today · 🇮🇳 India Only</p></td></tr>
+    <tr><td><p style="margin:0;color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">📡 Active Brands · 🇮🇳 India Only</p></td></tr>
   </table>
 
   <table width="640" cellpadding="0" cellspacing="0" style="margin:0 auto;">{grid_rows}</table>
@@ -357,8 +441,8 @@ def build_html(all_data: list, date_str: str) -> str:
     <tr>
       <td style="padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.7;">
-          Auto-generated daily at 9:30 AM IST by Qubo Intel Bot<br>
-          Powered by NewsData.io · Filtered by Claude AI · Delivered via Brevo<br>
+          Auto-generated Tuesday &amp; Friday at 9:30 AM IST by Qubo Intel Bot<br>
+          Powered by Serper · Filtered by Claude AI · Delivered via Brevo<br>
           <span style="color:#d1d5db;">Hero Electronix Pvt. Ltd.</span>
         </p>
       </td>
@@ -405,7 +489,7 @@ def main():
         raw = fetch_all_mentions(comp)
         print(f"  Raw results: {len(raw)}")
         if raw:
-            print(f"  Sample: {raw[0]['title'][:60]}")
+            print(f"  Sample dates: {[r.get('date', 'NO_DATE') for r in raw[:3]]}")
         filtered = filter_and_summarise(comp, raw)
         print(f"  Relevant: {len(filtered)}")
         all_data.append({"competitor": comp, "articles": filtered})
@@ -419,7 +503,7 @@ def main():
 
     total_mentions = sum(len(d["articles"]) for d in all_data)
     if total_mentions == 0:
-        print("\nNo mentions found today — skipping send. No blank digest delivered.")
+        print("\nNo mentions found — skipping send. No blank digest delivered.")
     else:
         print("Sending via Brevo...")
         send_email(html, date_str)
