@@ -3,7 +3,8 @@ name: Home Security Intel Digest
 on:
   schedule:
     # 9:30 AM IST = 4:00 AM UTC (staggered 30 min after dashcam digest)
-    - cron: "0 4 * * *"
+    - cron: "0 4 * * 2"    # Tuesday 9:30 AM IST
+    - cron: "0 4 * * 5"    # Friday 9:30 AM IST
   workflow_dispatch:
 
 jobs:
