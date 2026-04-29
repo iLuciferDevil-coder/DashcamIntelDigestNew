@@ -15,8 +15,8 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY  = os.environ["ANTHROPIC_API_KEY"]
+BREVO_API_KEY = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
@@ -27,11 +27,6 @@ SENDER_EMAIL = "contact@thetrendingone.in"
 SENDER_NAME  = "Qubo Intel Bot"
 
 IST = timezone(timedelta(hours=5, minutes=30))
-
-EXCLUDED_DOMAINS = [
-    "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
-    "upstox.com", "goodreturns.in", "indiainfoline.com",
-]
 
 COMPETITORS = [
     {"name": "70mai",       "color": "#f97316", "queries": ["70mai dashcam India", "70mai dash camera"]},
@@ -51,7 +46,23 @@ COMPETITORS = [
     {"name": "Qubo",        "color": "#3b82f6", "queries": ["Qubo dashcam", "Qubo dash camera review", "Qubo connected auto"]},
 ]
 
+EXCLUDED_DOMAINS = [
+    "msn.com", "yahoo.com", "flipboard.com", "smartnews.com",
+    "upstox.com", "goodreturns.in", "indiainfoline.com",
+]
+
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
+
+def is_within_48h(date_str: str) -> bool:
+    if not date_str:
+        return True
+    d = date_str.lower().strip()
+    if any(x in d for x in ["week", "month", "year"]):
+        return False
+    if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
+        return False
+    return True
+
 
 def is_excluded_domain(link: str) -> bool:
     return any(domain in link for domain in EXCLUDED_DOMAINS)
@@ -65,11 +76,11 @@ def serper_search(query: str, search_type: str = "search") -> list:
     }
     url = endpoint_map.get(search_type, endpoint_map["search"])
     payload = {
-        "q":   query,
-        "gl":  "in",
-        "hl":  "en",
-        "num": 5,
-        "tbs": "qdr:2d",
+        "q":        query,
+        "gl":       "in",
+        "hl":       "en",
+        "num":      5,
+        "tbs":      "qdr:2d",
         "location": "India",
     }
     headers = {
@@ -97,13 +108,15 @@ def serper_search(query: str, search_type: str = "search") -> list:
 
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
+    exclusions = "-site:msn.com -site:yahoo.com -site:flipboard.com"
     for q in competitor["queries"]:
-        all_results += serper_search(q, "news")
+        all_results += serper_search(f"{q} {exclusions}", "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
-
-    all_results = [r for r in all_results if not is_excluded_domain(r.get("link", ""))]
-
+    all_results = [
+        r for r in all_results
+        if is_within_48h(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))
+    ]
     seen = set()
     unique = []
     for r in all_results:
@@ -141,12 +154,9 @@ Today's date is {today}.
 
 Your task:
 1. Keep ONLY results that are relevant to dashcams, car cameras, or vehicle safety cameras for "{name}".
-2. Discard anything that is:
-   - Not clearly from or about India (must have Indian prices in ₹, Indian publication/channel, mention of India/Indian city, or .in domain)
-   - About other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans)
-   - Generic evergreen buying guides with no new information
+2. Discard anything about other product categories (e.g. CP Plus CCTV, boAt headphones, Jio telecom plans).
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo.
-4. Tag each result as "India" if clearly about the Indian market, or "Global" otherwise.
+4. Tag each result as "India" if it is clearly about the Indian market, or "Global" otherwise.
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
