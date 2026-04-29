@@ -53,8 +53,17 @@ EXCLUDED_DOMAINS = [
 
 def is_within_48h(date_str: str) -> bool:
     if not date_str:
-        return True
+        return False  # Changed to False — no date = we can't trust it, drop it
     d = date_str.lower().strip()
+    # Keep only clearly recent results
+    if any(x in d for x in ["hour", "minute", "just now", "second"]):
+        return True
+    if "1 day ago" in d or "2 day" in d:
+        return True
+    # Drop anything with a year that isn't current
+    current_year = str(datetime.now(IST).year)
+    if any(year in d for year in ["2019", "2020", "2021", "2022", "2023", "2024"]):
+        return False
     if any(x in d for x in ["week", "month", "year"]):
         return False
     if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
