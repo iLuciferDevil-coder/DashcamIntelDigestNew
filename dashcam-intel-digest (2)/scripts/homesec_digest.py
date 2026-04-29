@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Qubo Home Security Camera Intel Digest
-- Searches Web, YouTube, and Reddit for competitor mentions (last 4 days)
+- Searches Web, YouTube, and Reddit for competitor mentions in the last 48h
 - Uses Claude to filter noise and summarise relevance
 - India-only focus
-- Runs twice a week (Tuesday + Friday)
+- Runs twice a week (Tuesday + Friday) — home security news is sparse daily
 - 2-column grid layout, zero-mention brands hidden
 - Sends a beautiful HTML email via Brevo
 """
@@ -16,8 +16,8 @@ from datetime import datetime, timezone, timedelta
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BREVO_API_KEY  = os.environ["BREVO_API_KEY"]
-ANTHROPIC_KEY  = os.environ["ANTHROPIC_API_KEY"]
+BREVO_API_KEY = os.environ["BREVO_API_KEY"]
+ANTHROPIC_KEY = os.environ["ANTHROPIC_API_KEY"]
 SERPER_API_KEY = os.environ["SERPER_API_KEY"]
 RECIPIENTS = [
     {"email": "siddharth.bhattacharjee@heroelectronix.com", "name": "Siddharth"},
@@ -38,17 +38,17 @@ COMPETITORS = [
     {
         "name": "CP Plus",
         "color": "#ef4444",
-        "queries": ["CP Plus home security camera India", "CP Plus WiFi camera India", "CP Plus CCTV India"],
+        "queries": ["CP Plus home security camera India", "CP Plus CCTV indoor outdoor India"],
     },
     {
         "name": "Hikvision",
         "color": "#b91c1c",
-        "queries": ["Hikvision camera India", "Hikvision CCTV India", "Hikvision WiFi camera India"],
+        "queries": ["Hikvision home security camera India", "Hikvision WiFi camera India"],
     },
     {
         "name": "Dahua",
         "color": "#7c3aed",
-        "queries": ["Dahua camera India", "Dahua CCTV India", "Dahua WiFi camera India"],
+        "queries": ["Dahua home security camera India", "Dahua CCTV India"],
     },
     {
         "name": "Godrej",
@@ -58,7 +58,7 @@ COMPETITORS = [
     {
         "name": "TP-Link Tapo",
         "color": "#0369a1",
-        "queries": ["Tapo camera India", "TP-Link Tapo security camera India"],
+        "queries": ["TP-Link Tapo camera India", "Tapo home security camera India"],
     },
     {
         "name": "Imou",
@@ -73,22 +73,22 @@ COMPETITORS = [
     {
         "name": "Zebronics",
         "color": "#f59e0b",
-        "queries": ["Zebronics security camera India", "Zebronics WiFi camera India"],
+        "queries": ["Zebronics security camera India", "Zebronics CCTV India"],
     },
     {
         "name": "Secureye",
         "color": "#ec4899",
-        "queries": ["Secureye camera India", "Secureye CCTV India"],
+        "queries": ["Secureye security camera India", "Secureye CCTV India"],
     },
     {
         "name": "HiFocus",
         "color": "#0891b2",
-        "queries": ["HiFocus camera India", "HiFocus CCTV India"],
+        "queries": ["HiFocus security camera India", "HiFocus CCTV India"],
     },
     {
         "name": "Uniview",
         "color": "#6d28d9",
-        "queries": ["Uniview camera India", "Uniview CCTV India"],
+        "queries": ["Uniview security camera India", "Uniview CCTV India"],
     },
     {
         "name": "Prama",
@@ -108,7 +108,7 @@ COMPETITORS = [
     {
         "name": "Qubo",
         "color": "#3b82f6",
-        "queries": ["Qubo home security camera India", "Qubo smart camera India", "Qubo WiFi camera India"],
+        "queries": ["Qubo home security camera India", "Qubo smart camera India"],
     },
 ]
 
@@ -125,6 +125,17 @@ TAG_COLORS = {
 
 # ── Step 1: Fetch from Serper ─────────────────────────────────────────────────
 
+def is_within_48h(date_str: str) -> bool:
+    if not date_str:
+        return True
+    d = date_str.lower().strip()
+    if any(x in d for x in ["week", "month", "year"]):
+        return False
+    if any(x in d for x in ["3 day", "4 day", "5 day", "6 day"]):
+        return False
+    return True
+
+
 def is_excluded_domain(link: str) -> bool:
     return any(domain in link for domain in EXCLUDED_DOMAINS)
 
@@ -137,11 +148,11 @@ def serper_search(query: str, search_type: str = "search") -> list:
     }
     url = endpoint_map.get(search_type, endpoint_map["search"])
     payload = {
-        "q":   query,
-        "gl":  "in",
-        "hl":  "en",
-        "num": 5,
-        "tbs": "qdr:4d",
+        "q":        query,
+        "gl":       "in",
+        "hl":       "en",
+        "num":      5,
+        "tbs":      "qdr:2d",
         "location": "India",
     }
     headers = {
@@ -169,13 +180,15 @@ def serper_search(query: str, search_type: str = "search") -> list:
 
 def fetch_all_mentions(competitor: dict) -> list:
     all_results = []
+    exclusions = "-site:msn.com -site:yahoo.com -site:flipboard.com"
     for q in competitor["queries"]:
-        all_results += serper_search(q, "news")
+        all_results += serper_search(f"{q} {exclusions}", "news")
         all_results += serper_search(f"{q} site:youtube.com", "videos")
         all_results += serper_search(f"{q} site:reddit.com", "search")
-
-    all_results = [r for r in all_results if not is_excluded_domain(r.get("link", ""))]
-
+    all_results = [
+        r for r in all_results
+        if is_within_48h(r.get("date", "")) and not is_excluded_domain(r.get("link", ""))
+    ]
     seen = set()
     unique = []
     for r in all_results:
@@ -214,12 +227,12 @@ Today's date is {today}.
 Your task:
 1. Keep ONLY results clearly about home security cameras, CCTV cameras, indoor cameras, outdoor cameras, IP cameras, PTZ cameras, NVR/DVR systems, or WiFi surveillance cameras for "{name}" in the INDIAN market.
 2. Discard anything that is:
-   - Not clearly from or about India (must have Indian prices in ₹, Indian publication/channel, mention of India/Indian city, or .in domain)
    - Not about cameras or surveillance (e.g. Godrej locks, Zebronics speakers, Honeywell thermostats, TP-Link routers)
+   - Not relevant to India
    - About smart doorbells or video doorbells
    - Generic evergreen buying guides with no new information
 3. For each relevant result, write a 1-sentence insight (max 20 words) about why it matters to Qubo's home security business in India.
-4. Classify each result: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
+4. Classify each result into one of: New Launch / Price Drop / Review / Comparison / Market News / Feature Update / Consumer Complaint / Partnership
 5. Return ONLY a JSON array. No preamble, no markdown, no explanation.
 
 Format:
@@ -400,7 +413,7 @@ def build_html(all_data: list, date_str: str) -> str:
       <td style="background:linear-gradient(135deg,#0f172a 0%,#1a3a2a 100%);border-radius:16px;padding:28px 36px;text-align:center;">
         <p style="margin:0 0 4px;color:#34d399;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Hero Electronix · Qubo Home Security</p>
         <h1 style="margin:0 0 6px;color:#ffffff;font-size:26px;font-weight:900;letter-spacing:-0.5px;">🏠 Home Security Intel Digest</h1>
-        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India Only · Last 4 days</p>
+        <p style="margin:0;color:#94a3b8;font-size:13px;">{date_str} &nbsp;·&nbsp; 🇮🇳 India · Last 48 hours</p>
         <table cellpadding="0" cellspacing="0" style="margin:16px auto 0;">
           <tr>
             <td style="background:rgba(255,255,255,0.1);border-radius:8px;padding:8px 20px;text-align:center;">
@@ -441,7 +454,7 @@ def build_html(all_data: list, date_str: str) -> str:
     <tr>
       <td style="padding:20px;text-align:center;border-top:1px solid #e5e7eb;">
         <p style="margin:0;color:#9ca3af;font-size:11px;line-height:1.7;">
-          Auto-generated Tuesday &amp; Friday at 9:30 AM IST by Qubo Intel Bot<br>
+          Auto-generated twice weekly (Tue + Fri) at 9:30 AM IST by Qubo Intel Bot<br>
           Powered by Serper · Filtered by Claude AI · Delivered via Brevo<br>
           <span style="color:#d1d5db;">Hero Electronix Pvt. Ltd.</span>
         </p>
